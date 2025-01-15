@@ -63,7 +63,8 @@ class MicrophoneStream:
         try:
             audio = struct.unpack(f"{len(indata) // 2}h", indata)
             audio = np.array(audio).astype(np.float64)
-            rms = math.sqrt(np.square(audio).mean())
+            rms = math.sqrt(np.square(audio).mean()) 
+            print(f"Computed rms: {rms}")  # デバッグ用ログ
             return 20 * math.log10(rms) if rms > 0.0 else -math.inf
         except Exception as e:
             print(f"Error in compute_power: {e}")
@@ -75,10 +76,7 @@ class MicrophoneStream:
             self.input_stream.close()
             self.is_running = False
 
-mic_stream = None
-
 def background_thread(socketio):
-    """バックグラウンドでdBを計算して送信"""
     while mic_stream and mic_stream.is_running:
         try:
             audio_generator = mic_stream.generator()
@@ -86,6 +84,9 @@ def background_thread(socketio):
                 if not mic_stream.is_running:
                     break
                 power = mic_stream.compute_power(data)
+                print(f"Computed power: {power}")  # デバッグ用ログ
+                # {{ edit_1 }}: powerの値をターミナルに表示
+                print(f"Power value: {power}")  # 追加: powerの値をターミナルに表示
                 if power != -math.inf:
                     # クライアントにデータを送信
                     socketio.emit('audio_data', {'power': float(power)})
@@ -95,48 +96,50 @@ def background_thread(socketio):
             print(f"Error in background thread: {e}")
             break
 
+mic_stream = None
+
 def register_socket_events(socketio):
     @socketio.on('connect')
     def handle_connect():
-        """クライアント接続時の処理"""
+        global thread 
+        if thread is None:
+            thread = socketio.start_background_task(target=background_thread)
         print('Client connected')
 
-    @socketio.on('disconnect')
-    def handle_disconnect():
-        """クライアント切断時の処理"""
-        global mic_stream, thread
-        print('Client disconnected')
-        if mic_stream:
-            mic_stream.stop_stream()
-        mic_stream = None
-        thread = None
-
     @socketio.on('start_monitoring')
-    def handle_start_monitoring():
-        """音声モニタリング開始"""
-        global thread, mic_stream
-        print('Starting audio monitoring')
+    def handle_monitoring():
+        """音声モニタリングを開始"""
+        global mic_stream
+    
+        # 入力デバイス情報に基づき、サンプリング周波数の情報を取得
+        input_device_info = sd.query_devices(kind="input")
+        sample_rate = int(input_device_info["default_samplerate"])
+        chunk_size = 8000
 
-    # 入力デバイス情報に基づき、サンプリング周波数の情報を取得
-    input_device_info = sd.query_devices(kind="input")
-    sample_rate = int(input_device_info["default_samplerate"])
-    chunk_size = 8000
-    print(f"Input device info: {input_device_info}")
-
-    with thread_lock:
-        if thread is None:
-            # マイク入力の初期化
-            mic_stream = MicrophoneStream(sample_rate, chunk_size)
+        # マイク入力の初期化
+        mic_stream = MicrophoneStream(sample_rate, chunk_size)
+        
+        try:
             mic_stream.open_stream()
-            thread = socketio.start_background_task(background_thread, socketio)
+            with mic_stream.input_stream:
+                audio_generator = mic_stream.generator()
+                for data in audio_generator:
+                    power = mic_stream.compute_power(data)
+                    # WebSocketを通じてクライアントにデータを送信
+                    socketio.emit('audio_data', {
+                        'power': float(power)
+                    })
+        except Exception as e:
+            print(f"Error: {e}")
+            socketio.emit('error', {'message': str(e)})
 
     @socketio.on('stop_monitoring')
-    def handle_stop_monitoring():
-        """音声モニタリング停止"""
+    def handle_stop():
+        """音声モニタリングを停止"""
         global mic_stream
-        print('Stopping audio monitoring')
-        if mic_stream:
-            mic_stream.stop_stream()
+        if mic_stream and mic_stream.input_stream:
+            mic_stream.input_stream.stop()
+            mic_stream = None
 
 @sustainability_of_voice_bp.route('/')
 def index():

@@ -102,14 +102,39 @@ def hiragana():
     except requests.exceptions.RequestException as e:
         print(f"Error during API call: {e}")  # エラー詳細を記録
         return jsonify({'error': 'Failed to fetch data from the Hiragana API'}), 500
+    
+# 仮の単語データ保存
+registered_words = []
+
+@utterance_check_bp.route('/save_word', methods=['POST'])
+def save_word():
+    """単語を保存"""
+    global registered_words
+    word = request.json.get('word', '').strip()
+    if word and word not in registered_words:
+        registered_words.append(word)
+    return jsonify({'message': 'Word saved successfully', 'words': registered_words})
+
+@utterance_check_bp.route('/get_registered_words', methods=['GET'])
+def get_registered_words():
+    """登録された単語を取得"""
+    return jsonify({'words': registered_words})
 
 @utterance_check_bp.route('/')
 def index():
     return render_template('check.html')
 
+@utterance_check_bp.route('/word_registration')
+def word_registration():
+    return render_template('word_registration.html')
+
 @utterance_check_bp.route('/checkA', methods=['GET'])
 def check_a():
     return render_template('checkA.html')
+
+@utterance_check_bp.route('/checkB', methods=['GET'])
+def check_b():
+    return render_template('checkB.html')
 
 @utterance_check_bp.route('/checkA_end', methods=['GET', 'POST'])
 def check_a_end():
@@ -119,3 +144,12 @@ def check_a_end():
     mistakeWords = request.args.get('mistakeWords', '')
     targetCorrect = request.args.get('targetCorrect', 5)
     return render_template('checkA_end.html', correct=correct, mistakes=mistakes, correctWords=correctWords, mistakeWords=mistakeWords, targetCorrect=targetCorrect)
+
+@utterance_check_bp.route('/checkB_end', methods=['GET', 'POST'])
+def check_b_end():
+    correct = request.args.get('correct', 0)
+    mistakes = request.args.get('mistakes', 0)
+    correctWords = request.args.get('correctWords', '')
+    mistakeWords = request.args.get('mistakeWords', '')
+    targetCorrect = request.args.get('targetCorrect', 5)
+    return render_template('checkB_end.html', correct=correct, mistakes=mistakes, correctWords=correctWords, mistakeWords=mistakeWords, targetCorrect=targetCorrect)

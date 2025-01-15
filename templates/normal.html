@@ -75,6 +75,7 @@
 </head>
 <body class="text-center">
   <div class="container mt-4">
+    <h2>ノーマルモード</h2>
     <h4 class="mb-4">
       どのくらい長く声を出せるか、ボリュームメーターを使って試してみましょう。<br>
       発話を始めた時点で、経過時間のカウントが始まりますので、<br>「開始」ボタンを押してください。<br>
@@ -84,7 +85,7 @@
     <label for="threshold">しきい値</label>
     <select id="threshold" class="form-select mb-3" onchange="setThreshold()" style="width: auto; margin: 0 auto;">
       <option value="" disabled selected>選択してください</option>
-      <option value="30">天使(30dB)</option>
+      <!--<option value="30">天使(30dB)</option>-->
       <option value="45">簡単(45dB)</option>
       <option value="60">普通(60dB)</option>
       <option value="75">難しい(75dB)</option>
@@ -94,8 +95,10 @@
     <div class="meter-container">
       <div id="volume"></div>
       <span style="position: absolute; left: 0%; top: 20px; transform: translateX(-50%); font-size: 12px;">0dB</span> 
+      <!--
       <span style="position: absolute; left: 30%; top: 20px; transform: translateX(-50%); font-size: 12px;">30dB</span>
       <div class="threshold-line" style="left: 30%; background-color: red;"></div>
+      -->
       <span style="position: absolute; left: 45%; top: 20px; transform: translateX(-50%); font-size: 12px;">45dB</span>
       <div class="threshold-line" style="left: 45%; background-color: red;"></div>
       <span style="position: absolute; left: 60%; top: 20px; transform: translateX(-50%); font-size: 12px;">60dB</span>
@@ -112,8 +115,8 @@
 
     <p id="output"></p>
     <button onclick="goBack()" class="no-border">
-      <a href="{{ url_for('sustainability_of_voice.index', _external=False) }}?mode=hard">ハードモードへ</a>
-      <a href="../../index.html" class="btn btn-custom-primary w-100">
+      <a href="{{ url_for('sustainability_of_voice.index', mode='hard') }}">ハードモードへ</a>
+      <a href="{{ url_for('index') }}" class="btn btn-custom-primary w-100">
         <i class="fas fa-home me-2"></i>ホーム画面へ
       </a>
     </button>

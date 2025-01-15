@@ -158,8 +158,8 @@
   </div>
 
   <div class="button-group">
-    <a href="{{ url_for('utterance_check.index') }}" class="btn btn-try">再挑戦</a>
-    <a href="{{ url_for('index') }}" class="btn btn-primary">トップ画面へ</a>
+    <a href="{{ url_for('utterance_check.check_a') }}" class="btn btn-try">再挑戦</a>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">ホーム画面へ</a>
   </div>
 
   <script>
@@ -191,7 +191,6 @@
         achievementMessage.textContent = '次こそは目標達成ができるように頑張りましょう！';
         achievementMessage.classList.add('text-warning');
       }
-      //ここまではOK
 
       // 正解した単語の処理
       const correctWords = urlParams.get('correctWords').split('、');

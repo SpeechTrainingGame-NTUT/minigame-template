@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>サンプル音声</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
@@ -17,9 +16,6 @@
       margin-bottom: 20px;
       text-align: center;
     }
-    .content label {
-      margin-bottom: 10px;
-    }
     .content input[type="number"],
     .content input[type="text"],
     .content select {
@@ -30,28 +26,26 @@
     }
     .button-group {
       display: flex;
-      justify-content: center; /* 中央揃え */
-      gap: 10px; /* ボタン間のスペース */
+      justify-content: center;
+      gap: 10px;
     }
+    .button-group button,
+  .button-group a {
+    flex: 1; /* 各ボタンの幅を均等にする */
+    text-align: center; /* テキストを中央に配置 */
+  }
     .btn-primary {
-        background-color: #007bff;
-        border-color: #007bff;
-        color: white;
-        transition: background-color 0.3s;
+      background-color: #007bff;
+      color: white;
     }
-    .btn-primary:hover, .btn-primary:active {
-        background-color: #0056b3 !important; /* 濃い青 */
-        border-color: #0056b3 !important;
-        color: white !important;
+    .btn-home {
+      background-color: #007bff; /* 青 */
+      color: white;
+      border: none;
     }
-    .btn-try {
-        background-color: #28a745; /* 緑色の背景 */
-        color: white;
-        transition: background-color 0.3s;
-    }
-    .btn-try:hover, .btn-try:active {
-        background-color: #218838 !important; /* 濃い緑 */
-        color: white !important;
+    .btn-home:hover,
+    .btn-home:active {
+      background-color: #0056b3; /* 暗い青 */
     }
   </style>
 </head>
@@ -59,7 +53,14 @@
   <div class="row justify-content-center">
     <div class="col-12 col-md-8 col-lg-6">
       <h2 class="text-center mt-4">テキストを入力するとブラウザがしゃべります</h2>
-      <p class="text-center">以下の項目で、必要に応じて変更することができます。<br>音声合成を開始したい場合は、「読み上げる」を押してください。<br>ブラウザが単語を読み間違えることがあるので、その際は片仮名で聴きたい言葉を入力してください。<br>薄い灰色で書かれているのは入力の例です。</p>
+      <p class="text-center">
+        以下の項目で、必要に応じて変更することができます。<br>
+        音声合成を開始したい場合は、「開始」を押してください。<br>
+        ブラウザが単語を読み間違えることがあるので、その際は片仮名で聴きたい言葉を入力してください。<br>
+        薄い灰色で書かれているのは入力の例です。<br>
+        声のタイプで、女性のものを聴きたい場合は「Kyoko (日本語)」を、男性のものを聴きたい場合は<br>
+        「Hattori (日本語)」を選択してください
+      </p>
       
       <div class="content">
         <label for="rate">速さ(0.1 - 2.0, デフォルト：1.0)</label>
@@ -77,6 +78,13 @@
         <label for="txt">聴きたい言葉</label>
         <input id="txt" type="text" class="form-control" placeholder="生麦生米生卵">
       </div>
+      
+      <div class="button-group">
+        <button id="btn" class="btn btn-primary">開始</button>
+        <a href="{{ url_for('index') }}" class="btn btn-home w-100">
+          ホーム画面へ
+        </a>
+      </div>
     </div>
   </div>
   
@@ -84,47 +92,61 @@
     const btn = document.getElementById("btn");
     const voiceSelect = document.getElementById("voice");
 
-    // 音声リストの取得
+    // デバイスに応じた音声リストを設定
     function populateVoiceList() {
       const voices = window.speechSynthesis.getVoices();
       voiceSelect.innerHTML = '';
 
       // Mac用の音声リスト
       const macVoices = [
-        { name: "Kyoko", description: "女性: Kyoko (日本語)" },
-        { name: "Hattori", description: "男性: Hattori (日本語)" },
+        { name: "Kyoko", description: "Kyoko (日本語)" },
+        { name: "Hattori", description: "Hattori (日本語)" }
       ];
 
-      // Windows用の音声リスト
-      const windowsVoices = [
-        { name: "Microsoft Ichiro - Japanese (Japan)", description: "男性: Microsoft Ichiro (日本語)" },
-        { name: "Microsoft Ayumi - Japanese (Japan)", description: "女性: Microsoft Ayumi (日本語)" }
-      ];
+      // その他のデバイス用（Windows/Linux）
+      const otherVoices = voices.filter(voice => voice.lang.includes("ja")).map(voice => ({
+        name: voice.name,
+        description: `${voice.name} (${voice.lang})`
+      }));
 
-      // 適切な音声リストを選択
+      // デバイス判定
       const isMac = navigator.userAgent.includes("Mac");
-      const targetVoices = isMac ? macVoices : windowsVoices;
+      const targetVoices = isMac ? macVoices : otherVoices;
 
+      // 音声リストをセレクトボックスに追加
       targetVoices.forEach(({ name, description }) => {
         const option = document.createElement("option");
         option.value = name;
         option.textContent = description;
         voiceSelect.appendChild(option);
       });
+
+      // 音声が見つからない場合の対応
+      if (voiceSelect.options.length === 0) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "音声が見つかりません";
+        voiceSelect.appendChild(option);
+      }
     }
 
+    // 「読み上げる」ボタンの動作
     btn.addEventListener("click", () => {
       const synth = new SpeechSynthesisUtterance();
-      const txt = document.getElementById("txt");
-      synth.text = txt.value;
-
-      const rateInput = document.getElementById("rate");
-      synth.rate = parseFloat(rateInput.value) || 1.0;
-
+      const txt = document.getElementById("txt").value;
+      const rateInput = document.getElementById("rate").value;
       const selectedVoiceName = voiceSelect.value;
+
+      if (!txt) {
+        alert("読み上げるテキストを入力してください！");
+        return;
+      }
+
+      synth.text = txt;
+      synth.rate = parseFloat(rateInput) || 1.0;
+
       const voices = window.speechSynthesis.getVoices();
       const selectedVoice = voices.find(voice => voice.name === selectedVoiceName);
-
       if (selectedVoice) {
         synth.voice = selectedVoice;
       }
@@ -132,7 +154,11 @@
       window.speechSynthesis.speak(synth);
     });
 
+    // 音声リストの更新
     window.speechSynthesis.onvoiceschanged = populateVoiceList;
+
+    // 初期ロード時に音声リストを取得
+    populateVoiceList();
   </script>
 </body>
 </html>
