@@ -8,12 +8,6 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    #volumeGraph {
-      width: 840px; /* 表示上の幅を指定 */
-      height: 450px; /* 表示上の高さを指定 */
-      margin: 0 auto; /* 中央揃え */
-      display: none; /* 初期は非表示 */
-    }
     .meter-container {
       width: 100%;
       max-width: 1500px;
@@ -27,7 +21,6 @@
       left: 0;
       height: 100%;
       background: black;
-      /*transition: width .1s;*/
     }
     .threshold-line {
       position: absolute;
@@ -94,7 +87,6 @@
     <label for="threshold">しきい値</label>
     <select id="threshold" class="form-select mb-3" onchange="setThreshold()" style="width: auto; margin: 0 auto;">
       <option value="" disabled selected>選択してください</option>
-      <!--<option value="30">天使(30dB)</option>-->
       <option value="45">簡単(45dB)</option>
       <option value="60">普通(60dB)</option>
       <option value="75">難しい(75dB)</option>
@@ -104,18 +96,19 @@
     <div class="meter-container">
       <div id="volume"></div>
       <span style="position: absolute; left: 0%; top: 20px; transform: translateX(-50%); font-size: 12px;">0dB</span> 
-      <!--
-      <span style="position: absolute; left: 30%; top: 20px; transform: translateX(-50%); font-size: 12px;">30dB</span>
-      <div class="threshold-line" style="left: 30%; background-color: red;"></div>
-      -->
+    
       <span style="position: absolute; left: 45%; top: 20px; transform: translateX(-50%); font-size: 12px;">45dB</span>
       <div class="threshold-line" style="left: 45%; background-color: red;"></div>
+    
       <span style="position: absolute; left: 60%; top: 20px; transform: translateX(-50%); font-size: 12px;">60dB</span>
       <div class="threshold-line" style="left: 60%; background-color: red;"></div>
+    
       <span style="position: absolute; left: 75%; top: 20px; transform: translateX(-50%); font-size: 12px;">75dB</span>
       <div class="threshold-line" style="left: 75%; background-color: red;"></div>
+    
       <span style="position: absolute; left: 90%; top: 20px; transform: translateX(-50%); font-size: 12px;">90dB</span>
       <div class="threshold-line" style="left: 90%; background-color: red;"></div>
+    
       <span style="position: absolute; left: 100%; top: 20px; transform: translateX(-50%); font-size: 12px;">100dB</span>
     </div>
 
