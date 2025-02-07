@@ -1,114 +1,34 @@
-from flask import Blueprint, render_template, jsonify
-import queue
-import struct
+from flask import Blueprint, request, jsonify, render_template
 import numpy as np
-import sounddevice as sd
-import pyworld
-import threading
-import time
-import math
-import sys
+import pyworld as pw
 
-# Blueprintの作成
 voice_jump_hz_bp = Blueprint('voice_jump_hz', __name__, template_folder='../templates')
 
-# マイク入力の設定
-RATE = 44100  # サンプリングレート
-CHUNK = 1024  # チャンクサイズ（サンプル数）
+@voice_jump_hz_bp.route('/process_audio', methods=['POST'])
+def process_audio():
+    try:
+        audio_data = request.files['audio'].read()  # バイナリデータを取得
+        sample_rate = int(request.form['sample_rate'])  # サンプリングレートを取得
 
-# 音声データを格納するキュー
-audio_queue = queue.Queue()
+        float32_array = np.frombuffer(audio_data, dtype=np.float32)
+        float64_array = float32_array.astype(np.float64)
 
-frequency_result = 0.0  # グローバル変数で最新の基本周波数を保存
+        # 最低0.2秒分のデータを確保
+        min_samples = int(sample_rate * 0.2)  # 0.2秒分
+        if len(float64_array) < min_samples:
+            padding = np.zeros(min_samples - len(float64_array))
+            float64_array = np.concatenate((float64_array, padding))
 
-class MicrophoneStream:
-    """マイク音声入力のためのクラス."""
-    def __init__(self, rate, chunk):
-        self.rate = rate
-        self.chunk = chunk
-        self.buff = queue.Queue()
-        self.input_stream = None
+        # pyworld.dio() のframe_periodを適切に設定
+        frame_period = 1000 * (1024 / sample_rate)  # フレーム周期を計算
+        _f0, _ = pw.dio(float64_array, sample_rate, frame_period=frame_period)
+        f0 = _f0[_f0 > 0].mean() if len(_f0[_f0 > 0]) > 0 else 0.0
 
-    def open_stream(self):
-        """入力ストリームを初期化する."""
-        self.input_stream = sd.RawInputStream(
-            samplerate=self.rate,
-            blocksize=self.chunk,
-            dtype="int16",
-            channels=1,
-            callback=self.callback,
-        )
+        return jsonify({'frequency': round(f0, 2)})
 
-    def callback(self, indata, frames, time, status):
-        """マイク入力から音声データを取得."""
-        if status:
-            print(status, file=sys.stderr)
-        self.buff.put(bytes(indata))
-
-    def generator(self):
-        """音声データをキューから取得."""
-        while True:
-            chunk = self.buff.get()
-            if chunk is None:
-                return
-            data = [chunk]
-            while True:
-                try:
-                    chunk = self.buff.get(block=False)
-                    if chunk is None:
-                        return
-                    data.append(chunk)
-                except queue.Empty:
-                    break
-            yield b"".join(data)
-
-    def compute_frequency(self, indata):
-        """基本周波数を計算."""
-        global frequency_result
-        try:
-            audio = struct.unpack(f"{len(indata) // 2}h", indata)  # 16bit整数型データをfloatに変換
-            audio = np.array(audio).astype(np.float64)
-
-            # 音声データが十分な長さか確認
-            if len(audio) < self.rate * 0.5:  # 少なくとも0.5秒分のデータが必要
-                print("Insufficient data length for frequency calculation")
-                frequency_result = 0.0
-                return
-
-            # pyworldで基本周波数を計算
-            frame_period = 5.0  # フレーム周期（ミリ秒）
-            fo, _ = pyworld.dio(audio, self.rate, frame_period=frame_period)
-            nonzero_fo = fo[fo > 0]  # 非ゼロの周波数を抽出
-            frequency_result = nonzero_fo.mean() if len(nonzero_fo) > 0 else 0.0
-        except Exception as e:
-            print(f"Error in compute_frequency: {e}")
-            frequency_result = 0.0
-
-def start_audio_processing():
-    """音声処理を開始."""
-    mic_stream = MicrophoneStream(RATE, CHUNK)
-    mic_stream.open_stream()
-    threading.Thread(target=process_audio, args=(mic_stream,), daemon=True).start()
-
-def process_audio(mic_stream):
-    """音声データを処理して周波数を計算."""
-    audio_data = b""
-    with mic_stream.input_stream:
-        audio_generator = mic_stream.generator()
-        for data in audio_generator:
-            audio_data += data
-            if len(audio_data) >= RATE:  # 1秒分のデータを蓄積
-                mic_stream.compute_frequency(audio_data)
-                audio_data = b""  # 蓄積データをリセット
-
-# 音声処理スレッドを開始
-start_audio_processing()
-
-# Flaskエンドポイント
-@voice_jump_hz_bp.route('/get_frequency', methods=['GET'])
-def fetch_frequency():
-    """最新の基本周波数を返す."""
-    return jsonify({'frequency': frequency_result})
+    except Exception as e:
+        print(f"Error processing audio: {e}")
+        return jsonify({'error': 'Failed to process audio'}), 500
 
 @voice_jump_hz_bp.route('/')
 def index():
@@ -147,3 +67,8 @@ def performance4_hz_rslt():
 @voice_jump_hz_bp.route('/performance5_hz_rslt')
 def performance5_hz_rslt():
     return render_template('performance5_hz_rslt.html')
+
+def register_socketio(app_socketio):
+    """FlaskのSocket.IOを登録"""
+    global socketio
+    socketio = app_socketio
