@@ -1,29 +1,33 @@
-const canvas = document.getElementById('gameCanvas'); //キャンパスの初期化
-const ctx = canvas.getContext('2d');
-const messageElement = document.getElementById('message');
-const volumeBar = document.getElementById('volume-bar');
+const canvas = document.getElementById('gameCanvas'); // ゲーム用のキャンバス要素を取得
+const ctx = canvas.getContext('2d'); // キャンバスの 2D コンテキストを取得
+const volumeBar = document.getElementById('volume-bar'); // 音量バー要素を取得
 
-const player = { //プレイヤーの初期化
-    x: 0, 
-    y: 0, 
-    width: 20,
-    height: 20,
-    speed: 10,
-    jumpPower: 14, //この値は変えないように（15だと画面をはみ出してしまう）
-    dy: 0, 
-    onGround: true 
+// プレイヤーの初期化
+const player = {
+    x: 0,  // 足場の少し前に配置
+    y: 0,   // 初期化時に足場の上に配置
+    width: 20, // プレイヤーの幅を 20 に設定
+    height: 20, // プレイヤーの高さを 20 に設定
+    speed: 10, // プレイヤーの速度を 10 に設定
+    jumpPower: 14, // ジャンプをの強さを 14 に設定
+    dy: 0, // プレイヤーの y 方向の速度を 0 に設定
+    onGround: true // プレイヤーが地面にいるかどうかを true に設定
 };
 
-const gravity = 0.5; 
-const platforms = [
+const gravity = 0.5; // 重力を 0.5 に設定
+const platforms = [ // 足場の初期化
     { x: 0, y: 280, width: 220, height: 200 },
     { x: 220, y: 200, width: 150, height: 280 },
     { x: 370, y: 280, width: 170, height: 230 },
     { x: 540, y: 200, width: 130, height: 280 },
     { x: 670, y: 280, width: 130, height: 200 }
 ];
-let goal = { x: 780, y: 260, width: 20, height: 20 };
-let gameRunning = false;
+let goal = { x: 780, y: 260, width: 20, height: 20 }; // ゴールの初期化
+let gameRunning = false; // ゲームが実行中かどうかを false に設定
+
+let startTime;
+let coinScore = 0;
+let collectedCoins = { red: 0, blue: 0, yellow: 0 };
 
 // 各コインの色とポイントの定義
 let coinData = [
@@ -40,16 +44,31 @@ let coinData = [
     { x: 740, y: platforms[4].y - 8, radius: 8, color: 'yellow', points: 10 }
 ];
 
-let startTime;
-let coinScore = 0; // グローバルに移動
-let collectedCoins = { red: 0, blue: 0, yellow: 0 };
-let socket = null;
+// dB のしきい値
+const jumpThreshold = 70;
+const moveThreshold = 30;
 
+// プレイヤーを描画する関数
 function drawPlayer() {
     ctx.fillStyle = 'blue';
     ctx.fillRect(player.x, player.y, player.width, player.height);
 }
 
+// 足場を描画する関数
+function drawPlatforms() {
+    ctx.fillStyle = 'black';
+    platforms.forEach(platform => {
+        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+    });
+}
+
+// ゴールを描画する関数
+function drawGoal() {
+    ctx.fillStyle = 'red';
+    ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+}
+
+// コインを描画する関数
 function drawCoins() {
     coinData.forEach(coin => {
         ctx.beginPath();
@@ -60,13 +79,14 @@ function drawCoins() {
     });
 }
 
+// プレイヤーの位置を更新する関数
 function updatePlayer() {
-    if (!gameRunning) return;
-
-    player.y += player.dy;
+    if (!gameRunning) return; // ゲームが実行中でない場合は処理を終了
+    
+    player.y += player.dy; // プレイヤーの y 座標に速度を加算
 
     if (!player.onGround) {
-        player.dy += gravity; // 重力の影響を追加
+        player.dy += gravity; // プレイヤーが地面にいない場合は重力を適用
     }
 
     let onAnyPlatform = false;
@@ -74,8 +94,8 @@ function updatePlayer() {
         if (
             player.x < platform.x + platform.width &&
             player.x + player.width > platform.x &&
-            player.y + player.height <= platform.y + 10 &&
-            player.y + player.height >= platform.y
+            player.y + player.height >= platform.y &&
+            player.y + player.height <= platform.y + 10
         ) {
             player.y = platform.y - player.height;
             player.dy = 0;
@@ -88,11 +108,10 @@ function updatePlayer() {
         player.onGround = false;
     }
 
-    //プレイヤーが画面の下に落ちたらゲームオーバー
     if (player.y + player.height > canvas.height) {
         player.y = canvas.height - player.height;
         player.dy = 0;
-        endGame(false); //ゲームオーバーの場合、結果画面にいかない
+        endGame(false);
     }
 
     if (player.y + player.height < 0) {
@@ -100,25 +119,23 @@ function updatePlayer() {
         player.dy = 0;
     }
 
-    //ゴールに到達したらクリア
     if (
         player.x < goal.x + goal.width &&
         player.x + player.width > goal.x &&
         player.y + player.height > goal.y &&
         player.y < goal.y + goal.height
     ) {
-        endGame(true); //クリアした場合、結果画面にいく
+        endGame(true);
     }
 
-    //プレイヤーがゴールを通り過ぎたらゲームオーバー
     if (player.x > goal.x + goal.width) {
-        endGame(false); //ゲームオーバーの場合、結果画面にいかない
+        endGame(false);
     }
 
-    checkCoinCollision();  // コインとの衝突を確認
+    checkCoinCollision();
 }
 
-// コインとの衝突を確認
+// コインとの衝突判定を行う関数
 function checkCoinCollision() {
     coinData = coinData.filter(coin => {
         const distX = player.x + player.width / 2 - coin.x;
@@ -126,41 +143,14 @@ function checkCoinCollision() {
         const distance = Math.sqrt(distX * distX + distY * distY);
 
         if (distance < coin.radius + player.width / 2) {
-            coinScore += coin.points; // コインのポイントを加算
-            // 獲得したコインの色に応じてカウントを増やす
+            coinScore += coin.points;
             if (coin.color === 'red') collectedCoins.red++;
             if (coin.color === 'blue') collectedCoins.blue++;
             if (coin.color === 'yellow') collectedCoins.yellow++;
-            return false; // 取得したコインを配列から削除
+            return false;
         }
         return true;
     });
-}
-
-function drawPlatforms() {
-    ctx.fillStyle = 'black';
-    platforms.forEach(platform => {
-        ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-    });
-}
-
-function drawGoal() {
-    ctx.fillStyle = 'red';
-    ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
-}
-
-function resetGame() {
-    const firstPlatform = platforms[0];
-    player.x = firstPlatform.x;
-    player.y = firstPlatform.y - player.height;
-    player.dy = 0;
-    player.onGround = true;
-    gameRunning = false;
-
-    if (socket) {
-        socket.disconnect();
-        socket = null;
-    }
 }
 
 function gameLoop() {
@@ -168,65 +158,91 @@ function gameLoop() {
     drawPlayer();
     drawPlatforms();
     drawGoal();
-    drawCoins(); // コインを描画
+    drawCoins();
     updatePlayer();
     requestAnimationFrame(gameLoop);
 }
 
-function beginDetect() {
-    startTime = performance.now();
-    gameRunning = true;
+function resetGame() {
+    const firstPlatform = platforms[0];
+    player.x = firstPlatform.x; // 初期位置を調整
+    player.y = firstPlatform.y - player.height; // 足場の上に配置
+    player.dy = 0;
+    player.onGround = true;
+    gameRunning = false;
+}
 
-    // WebSocketの接続を確立（相対パスを使用）
-    socket = io('http://localhost:8080', {
-        transports: ['websocket'],
-        upgrade: false
-    });
-
-    socket.on('connect', () => {
-        console.log('Connected to WebSocket server');
-        socket.emit('start_monitoring');
-    });
-
-    socket.on('audio_data', (data) => {
-        const dbLevel = data.power;
-        console.log('Received audio data:', dbLevel);
-    
-        // 既存のvolume-display要素を更新または作成
-        let volumeDisplayElement = document.getElementById('volume-display');
-        if (!volumeDisplayElement) {
-            volumeDisplayElement = document.createElement('div');
-            volumeDisplayElement.id = 'volume-display';
-            document.body.appendChild(volumeDisplayElement);
+// 音声処理を開始する関数
+function startAudioProcessing() {
+    navigator.mediaDevices.getUserMedia({ // ユーザーのマイクにアクセス
+        audio: {
+            echoCancellation: false, // エコーキャンセル無効化
+            noiseSuppression: false, // ノイズ抑制無効化
+            autoGainControl: false  // 自動ゲインコントロール無効化
         }
-        
-        // ボリュームバーの更新
-        if (volumeBar) {
-            volumeBar.style.width = `${Math.max(0, Math.min(100, dbLevel))}%`;
-        }
-    
-        // キャラクターの動きを制御
-        if (gameRunning) {
-            if (dbLevel >= 70 && player.onGround) {
-                console.log('Jump triggered:', dbLevel);
-                player.dy = -player.jumpPower;
-                player.onGround = false;
-            } else if (dbLevel >= 30 && dbLevel < 70) {
-                console.log('Move forward:', dbLevel);
-                player.x += player.speed;
-            }
-        }
-    });
+    })
+    .then(stream => { // マイクへのアクセスが成功した場合
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)(); // オーディオコンテキストを作成
+        const microphone = audioContext.createMediaStreamSource(stream); // マイクからの入力を取得
+        const processor = audioContext.createScriptProcessor(4096, 1, 1); // オーディオデータを処理するプロセッサを作成
 
-    socket.on('error', (data) => {
-        console.error('WebSocket error:', data.message);
-        gameRunning = false;
-    });
+        processor.onaudioprocess = (event) => { // オーディオデータの処理
+            const inputBuffer = event.inputBuffer.getChannelData(0); // 入力バッファからデータを取得
+            const int16Array = floatTo16BitPCM(inputBuffer); // Float32 形式のオーディオデータを 16-bit PCM に変換
+            sendAudioData(int16Array); // サーバーに音声データを送信
+        };
 
-    socket.on('disconnect', () => {
-        console.log('Disconnected from WebSocket server');
-        gameRunning = false;
+        microphone.connect(processor); // マイクからの入力をプロセッサに接続
+        processor.connect(audioContext.destination); // プロセッサの出力をデスティネーションに接続
+    })
+    .catch(error => {
+        console.error("マイクのアクセスに失敗しました:", error);
     });
+}
+
+function floatTo16BitPCM(inputBuffer) { //Float32 形式のオーディオデータを 16-bit PCM に変換する関数
+    const int16Array = new Int16Array(inputBuffer.length); //16-bit の整数配列 (Int16Array) を作成
+    for (let i = 0; i < inputBuffer.length; i++) { //音声データの各サンプルをループ処理
+        int16Array[i] = Math.max(-32768, Math.min(32767, inputBuffer[i] * 32768)); //Float32（-1.0 ～ 1.0 の範囲）を 16-bit PCM（-32768 ～ 32767）に変換
+    }
+    return int16Array; //16-bit PCM に変換したデータを返す
+}
+
+function sendAudioData(data) { //サーバーに音声データを送信する
+    fetch("/voice_jump_db/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body: data.buffer, //オーディオデータ (data.buffer) を送信。data.buffer は Int16Array のバイナリデータ
+    })
+    .then(response => response.json())
+    .then(({ db }) => {
+        handlePlayerMovement(db);
+        updateVolumeDisplay(db);
+    })
+    .catch(error => console.error("音声データ送信エラー:", error));
+}
+
+function updateVolumeDisplay(db) {
+    if (volumeBar) {
+        volumeBar.style.width = `${db}%`; // dB 値そのままをバーの長さに反映
+    }
+}
+
+function handlePlayerMovement(db) { //プレイヤーの移動を制御する関数
+    if (gameRunning) { //ゲームが実行中の場合
+        if (db >= jumpThreshold && player.onGround) { //dB がジャンプのしきい値以上で、プレイヤーが地面にいる場合
+            player.dy = -player.jumpPower; // プレイヤーをジャンプさせる
+            player.onGround = false; // プレイヤーが地面にいない状態にする
+        } else if (db >= moveThreshold && db < jumpThreshold) { //dB が移動のしきい値以上かつジャンプのしきい値未満の場合
+            player.x += player.speed; // プレイヤーを右に移動
+        }
+    }
+}
+
+function beginDetect() { //ゲームを開始する
+    gameRunning = true; //ゲームが実行中に
+    startTime = performance.now(); //ゲームの開始時刻を記録
+    startAudioProcessing(); //音声処理を開始
 }
 
 function endGame(isCleared) {
