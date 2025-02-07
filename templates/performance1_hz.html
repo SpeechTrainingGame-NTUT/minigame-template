@@ -116,9 +116,15 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        window.onload = function () {
+            player.x = 0; // 左端に配置（0にすると枠の外になる可能性がある）
+            player.y = platforms[0].y - player.height; // 足場の上に配置
+            drawGame();  // 初期状態でゲーム画面を描画
+        };
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-
+    
         const player = {
             x: 0,
             y: 0,
@@ -129,19 +135,19 @@
             dy: 0,
             onGround: true
         };
-
+    
         const gravity = 1.0;
         const platforms = [{ x: 0, y: 220, width: 1000, height: 1000 }];
         let goal = { x: 780, y: 200, width: 20, height: 20 };
         let gameRunning = false;
-
+    
         let coinData = [
             { x: 230, y: 60, radius: 8, color: 'red', points: 30 },
             { x: 330, y: 40, radius: 8, color: 'red', points: 30 },
 
             { x: 500, y: 30, radius: 8, color: 'blue', points: 20 },
             { x: 650, y: 80, radius: 8, color: 'blue', points: 20 },
-            
+
             { x: 150, y: 150, radius: 8, color: 'yellow', points: 10 },
             { x: 70, y: platforms[0].y - 8, radius: 8, color: 'yellow', points: 10 },
             { x: 280, y: platforms[0].y - 8, radius: 8, color: 'yellow', points: 10 },
@@ -149,35 +155,69 @@
             { x: 600, y: platforms[0].y - 8, radius: 8, color: 'yellow', points: 10 },
             { x: 700, y: platforms[0].y - 8, radius: 8, color: 'yellow', points: 10 }
         ];
-
+    
         let startTime;
         let coinScore = 0;
         let collectedCoins = { red: 0, blue: 0, yellow: 0 };
 
-        function drawPlayer() {
-            ctx.fillStyle = 'blue';
-            ctx.fillRect(player.x, player.y, player.width, player.height);
-        }
-
-        function drawCoins() {
-            coinData.forEach(coin => {
-                ctx.beginPath();
-                ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
-                ctx.fillStyle = coin.color;
-                ctx.fill();
-                ctx.closePath();
-            });
-        }
-
-        let voiceDuration = 0; // 200Hz以上の声を出し続けた時間をカウント
-        let jumpStartTime = null; // ジャンプ開始時間
-        let isAbove200Hz = false; // 現在の周波数が200Hz以上かどうかを記録
-        let isGoalReached = false; // ゴール到達状態を記録するフラグ
+        let isGoalReached = false;
+        let isAbove200Hz = false;
         let lastFrequencyUpdateTime = 0;
         const frequencyUpdateInterval = 100;
+    
+        let audioContext;
+        let analyser;
+        let microphone;
+        let javascriptNode;
+        let scriptProcessor;
+        let recording = false;
+    
+        async function startMicrophone() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioContext = new AudioContext();
+            const sampleRate = audioContext.sampleRate; // サンプリングレートを取得
+            analyser = audioContext.createAnalyser();
+            microphone = audioContext.createMediaStreamSource(stream);
+            scriptProcessor = audioContext.createScriptProcessor(8192, 1, 1); // bufferSizeを1024に変更
 
-        async function updatePlayer() {
-            if (!gameRunning || isGoalReached) return; // 周波数計算が停止していれば処理を中断
+            analyser.fftSize = 2048;
+            microphone.connect(analyser);
+            analyser.connect(scriptProcessor);
+            scriptProcessor.connect(audioContext.destination);
+
+            scriptProcessor.onaudioprocess = function (event) {
+                if (!recording) return;
+                const buffer = event.inputBuffer.getChannelData(0);
+                sendAudioData(buffer, sampleRate); // サンプリングレートを送る
+            };
+        } catch (err) {
+            console.error("マイクのアクセスに失敗しました:", err);
+        }
+    }
+    
+    function sendAudioData(buffer, sampleRate) {
+        const float32Array = new Float32Array(buffer);
+        const blob = new Blob([float32Array], { type: 'application/octet-stream' });
+
+        const formData = new FormData();
+        formData.append('audio', blob);
+        formData.append('sample_rate', sampleRate); // サンプリングレートを送信
+
+        fetch('/voice_jump_hz/process_audio', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            updateGame(data.frequency);
+            updateVolumeBar(data.frequency);
+        })
+        .catch(error => console.error('Error sending audio:', error));
+    }
+    
+        async function updateGame(frequency) {
+            if (!gameRunning || isGoalReached) return;
 
             if (
                 player.x >= 760 &&
@@ -197,47 +237,41 @@
                 endGame(false);
                 return; // 処理終了
             }
-
+    
             const currentTime = performance.now();
             if (currentTime - lastFrequencyUpdateTime >= frequencyUpdateInterval) {
-                let frequency = await fetchFrequency();
-                console.log('Frequency:', frequency);
                 lastFrequencyUpdateTime = currentTime;
-
+    
                 if (frequency >= 200) {
-                    isAbove200Hz = true; // 200Hz以上に切り替え
+                    isAbove200Hz = true;
                     if (player.onGround) {
-                        player.dy = -player.jumpPower; // ジャンプ力を設定                    
-                        player.onGround = false; // 空中状態に設定
+                        player.dy = -player.jumpPower;
+                        player.onGround = false;
                     } else {
-                        // 周波数が200Hz以上の間、dyを1.0ずつ増加
-                        player.dy -= 1.0; // 上昇中の速度を増加させる
+                        player.dy -= 1.0;
                     }
-                    // x座標を増加させる（水平移動）
                     player.x += player.speed;
                 } else if (frequency < 200 && frequency >= 100) {
                     if (isAbove200Hz) {
-                        player.dy = 0; // 200Hz以上から100Hz台に変化したらdyをリセット
+                        player.dy = 0;
                     }
-                    isAbove200Hz = false; // 状態をリセット
-                    player.dy += 1.0; 
+                    isAbove200Hz = false;
+                    player.dy += 1.0;
                     player.x += player.speed;
                 } else {
                     isAbove200Hz = false;
                     player.dy += 1.0;
                 }
-
+    
                 player.y += player.dy;
-
-                // 地面との衝突判定
+    
                 const groundLevel = platforms[0].y - player.height;
                 if (player.y >= groundLevel) {
                     player.y = groundLevel;
                     player.dy = 0;
                     player.onGround = true;
                 }
-
-                // プレイヤーの上方向の制限
+    
                 if (player.y < 0) {
                     player.y = 0;
                     player.dy = 0;
@@ -265,37 +299,50 @@
                         console.log('Player landed on platform');
                     }
                 });
-
-                // 足場に触れていない場合は空中状態に設定
-                if (!onAnyPlatform && player.y + player.height < canvas.height) {
-                    player.onGround = false;
+    
+                if (player.x + player.width > canvas.width) {
+                    endGame(false);
+                    return;
                 }
-
-                // 地面に到達した場合（プレイヤーが地面を超える直前に補正）
-                if (player.y + player.height > canvas.height) {
-                    player.y = canvas.height - player.height; // 地面に固定
-                    player.dy = 0; // 縦方向の速度をリセット
-                    player.onGround = true; // 地面にいる状態に設定
-                    console.log('Player landed on ground');
+    
+                if (player.x >= goal.x && player.y + player.height >= goal.y) {
+                    isGoalReached = true;
+                    endGame(true);
+                    return;
                 }
-
-                console.log(`Player Position: x=${player.x}, y=${player.y}`);
+    
                 lastFrequency = frequency; // 前回の周波数を更新
-                drawPlayer(); // プレイヤーを描画
-                drawCoins(); // コインを描画
+                drawGame();
                 updateVolumeBar(frequency);
-                checkCoinCollision(); // コインの衝突判定
-
-                console.log(`Player Position: x=${player.x}, y=${player.y}, dy=${player.dy}`);
+                checkCoinCollision();
             }
         }
-
+    
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            platforms.forEach(platform => ctx.fillRect(platform.x, platform.y, platform.width, platform.height));
+            ctx.fillStyle = 'red';
+            ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+    
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+    
+            coinData.forEach(coin => {
+                ctx.beginPath();
+                ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
+                ctx.fillStyle = coin.color;
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+    
         function checkCoinCollision() {
             coinData = coinData.filter(coin => {
                 const distX = player.x + player.width / 2 - coin.x;
                 const distY = player.y + player.height / 2 - coin.y;
                 const distance = Math.sqrt(distX * distX + distY * distY);
-
+    
                 if (distance < coin.radius + player.width / 2) {
                     coinScore += coin.points;
                     if (coin.color === 'red') collectedCoins.red++;
@@ -306,106 +353,36 @@
                 return true;
             });
         }
-
-        function drawPlatforms() {
-            ctx.fillStyle = 'black';
-            platforms.forEach(platform => {
-                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
-            });
-        }
-
-        function drawGoal() {
-            ctx.fillStyle = 'red';
-            ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
-        }
-
-        let gameLoopId; // ゲームループのIDを格納する変数
-
-        function gameLoop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawPlatforms();
-            drawGoal();
-            drawPlayer();
-            drawCoins();
-            updatePlayer();
-            gameLoopId = requestAnimationFrame(gameLoop); // ゲームループのIDを保存
-        }
-
-        window.onload = () => {
-            resetGame();
-            drawInitialState();
-            drawCoins(); // 初期状態でコインを描画
-        };
-
-        function drawInitialState() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            drawPlatforms(); // 足場を描画
-            drawPlayer(); // プレイヤーを描画
-            drawGoal(); // ゴールを描画
-            drawCoins(); // コインを描画
-        }
-        
+    
         function updateVolumeBar(frequency) {
             const bar = document.getElementById('volume-bar');
-            const normalizedFrequency = Math.min(Math.max(frequency, 0), 300); // 0〜300Hzに制限
-            const percentage = (normalizedFrequency / 300) * 100; // 300Hzを基準に割合計算
-            bar.style.width = `${percentage}%`; // バーの幅を更新
+            const percentage = Math.min(Math.max(frequency, 0), 300) / 300 * 100;
+            bar.style.width = `${percentage}%`;
         }
-
-        let lastFrequency = 0; // 前回の周波数を記録
-        async function fetchFrequency() {
-            try {
-                const response = await fetch('/voice_jump_hz/get_frequency');
-                if(!response.ok){
-                    throw new Error(`サーバーからの応答が異常です: ${response.status}`);
-                }
-                const data = await response.json();
-                return data.frequency;
-            } catch (error) {
-                console.error('Error fetching frequency:', error);
-                return 0;
-            }
+    
+        function startGame() {
+            recording = true;
+            startMicrophone();
+            gameRunning = true;
+            startTime = performance.now();
         }
-
-        document.getElementById('startButton').addEventListener('click', () => {
-            if (!gameRunning) {
-                resetGame();
-                gameRunning = true;
-                startTime = performance.now();
-                gameLoop();
-            }
-        });
-
+    
         function endGame(isCleared) {
+            recording = false;
+            if (audioContext) audioContext.close();
+    
             gameRunning = false;
-            cancelAnimationFrame(gameLoopId); // ゲームループを明示的に停止
-
+    
             if (isCleared) {
-                const elapsedTime = ((window.performance.now() - startTime) / 1000).toFixed(2);
+                const elapsedTime = ((performance.now() - startTime) / 1000).toFixed(2); // 経過時間を計算
                 const resultURL = `/voice_jump_hz/performance1_hz_rslt?elapsedTime=${elapsedTime}&coinScore=${coinScore}&redCoins=${collectedCoins.red}&blueCoins=${collectedCoins.blue}&yellowCoins=${collectedCoins.yellow}`;
                 window.location.href = resultURL;
             } else {
                 window.location.reload();
             }
         }
-
-        function resetGame() {
-            player.x = 0;
-            player.y = platforms[0].y - player.height;
-            player.dy = 0;
-            player.onGround = true;
-            isGoalReached = false;
-            coinScore = 0;
-            collectedCoins = { red: 0, blue: 0, yellow: 0 };
-            lastFrequencyUpdateTime = 0;
-            gameRunning = false;
-
-            if (gameLoopId) {
-                cancelAnimationFrame(gameLoopId); // 前回のゲームループを停止
-            }
-            
-            drawInitialState();
-        }
+    
+        document.getElementById('startButton').addEventListener('click', startGame);
     </script>
 </body>
 </html>
