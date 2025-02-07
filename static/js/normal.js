@@ -1,95 +1,126 @@
-var socket = io.connect(window.location.origin);
-var threshold = 0;
-var timer;
-var elapsedTime = 0;
-var isDetecting = false;
-var hasExceededThreshold = false;
+let audioContext;
+let microphone;
+let processor;
+let isRecording = false;
+let threshold = 0;
+let startTime = null;
+let elapsedTime = 0.0;
+let timerInterval = null;
+let isFrozen = false;  // しきい値を下回ったらバーの更新を停止するフラグ
+let hasCrossedThreshold = false; // 一度でもしきい値を超えたかを判定
 
-window.onload = function() {
-  resetTimer(); // ページロード時にタイマーをリセット
-};
-
-socket.on('connect', function() {
-  console.log('Connected to server');
-  socket.emit('start_monitoring');
-});
-
-socket.on('audio_data', function(data) {
-  if (!isDetecting) return; // 開始ボタンが押されるまで動作しない
-
-  console.log('Received audio data:', data);
-  var dB = data.power;
-
-  // バーを常に動作させる
-  document.getElementById('volume').style.width = Math.min(100, (dB / 100) * 100) + '%';
-
-  // しきい値を超えたらカウントを開始
-  if (threshold > 0 && dB > threshold) {
-    if (!hasExceededThreshold) {
-      hasExceededThreshold = true; // しきい値を初めて超えた
-      startTimer(); // カウントを開始
-    }
-  }
-
-  // 一度しきい値を超えた後、下回ったら停止
-  if (hasExceededThreshold && dB < threshold) {
-    stopTimer();
-    isDetecting = false; // 停止状態に
-  }
-});
-
-socket.on('disconnect', function() {
-  console.log('Disconnected from server');
-  socket.emit('stop_monitoring');
-});
+document.getElementById("threshold").addEventListener("change", setThreshold);
+document.querySelector(".btn-start").addEventListener("click", startRecording);
 
 function setThreshold() {
-  const dBValue = parseFloat(document.getElementById('threshold').value);
-  threshold = dBValue;
-  resetTimer();
-
-  // しきい値が設定されたら音声認識を開始
-  if (threshold > 0) {
-    socket.emit('start_monitoring');
-  }
+    threshold = parseInt(document.getElementById("threshold").value, 10);
+    console.log(`しきい値設定: ${threshold} dB`);
 }
 
-function startTimer() {
-  timer = setInterval(() => {
-    elapsedTime += 0.01; // 0.01秒ずつ増加
-    const elapsedTimeElement = document.getElementById('elapsedTime');
-    if (elapsedTimeElement) {
-      elapsedTimeElement.innerText = '経過時間: ' + elapsedTime.toFixed(2) + '秒'; // 小数第2位まで表示
+async function startRecording() {
+    if (isRecording) return;
+    isRecording = true;
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                echoCancellation: false, 
+                noiseSuppression: false, 
+                autoGainControl: false 
+            }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        microphone = audioContext.createMediaStreamSource(stream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        processor.onaudioprocess = (event) => {
+            const inputBuffer = event.inputBuffer.getChannelData(0);
+            const int16Array = floatTo16BitPCM(inputBuffer);
+            sendAudioData(int16Array);
+        };
+
+        microphone.connect(processor);
+        processor.connect(audioContext.destination);
+    } catch (error) {
+        console.error("マイクへのアクセスに失敗しました:", error);
     }
-  }, 10); // 10ミリ秒ごとに更新
 }
 
-function stopTimer() {
-  clearInterval(timer);
-  timer = null;
+function floatTo16BitPCM(inputBuffer) {
+    const int16Array = new Int16Array(inputBuffer.length);
+    for (let i = 0; i < inputBuffer.length; i++) {
+        int16Array[i] = Math.max(-32768, Math.min(32767, inputBuffer[i] * 32768));
+    }
+    return int16Array;
 }
 
-function resetTimer() {
-  stopTimer();
-  elapsedTime = 0;
-  const elapsedTimeElement = document.getElementById('elapsedTime');
-  if (elapsedTimeElement) {
-    elapsedTimeElement.innerText = '経過時間: 0秒';
-  }
-  // バーをリセット
-  document.getElementById('volume').style.width = '0%';
+async function sendAudioData(data) {
+    try {
+        const response = await fetch("/sustainability_of_voice/audio", {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: data.buffer,
+        });
+
+        if (response.ok) {
+            const { db } = await response.json();
+            
+            console.log("現在の声量:", db, "dB");
+
+            handleThresholdCheck(db);
+        }
+    } catch (error) {
+        console.error("音声データ送信中のエラー:", error);
+    }
 }
 
-function beginDetect() {
-  if (threshold > 0) {
-    isDetecting = true; // 開始ボタンが押されたら動作を開始
-    hasExceededThreshold = false; // フラグをリセット
-    socket.emit('start_monitoring');
-  } else {
-    alert('しきい値を設定してください。');
-  }
+function updateVolumeDisplay(db) {
+    const volumeBar = document.getElementById("volume");
+
+    const clampedDb = Math.max(0, Math.min(db, 120));
+    const displayDb = Math.min(clampedDb, 100);
+    const scaledDb = (displayDb / 100) * 100;
+
+    volumeBar.style.width = `${scaledDb}%`;
 }
 
-function goBack() {
-  window.location.href = "../../index.html";
+function handleThresholdCheck(db) {
+    if (isFrozen) {
+        return; // 既にしきい値を下回っていたら何もしない
+    }
+
+    if (db >= threshold) {
+        if (!hasCrossedThreshold) {
+            hasCrossedThreshold = true; // 初めてしきい値を超えたらフラグを立てる
+        }
+
+        if (!startTime) {
+            startTime = Date.now();
+            timerInterval = setInterval(() => {
+                elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+                updateElapsedTime();
+            }, 10);
+        }
+        updateVolumeDisplay(db);
+    } else {
+        if (hasCrossedThreshold) {
+            // 一度しきい値を超えた後にしきい値未満になったら固定
+            if (startTime) {
+                clearInterval(timerInterval);
+                startTime = null;
+            }
+            isFrozen = true; // しきい値を下回ったらロック
+        }
+        updateVolumeDisplay(db); // しきい値未満でも現在の音量を表示
+    }
 }
+
+function updateElapsedTime() {
+    document.getElementById("elapsedTime").textContent = `経過時間: ${elapsedTime}秒`;
+}
+
+window.onload = function () {
+    elapsedTime = 0.0;
+    updateElapsedTime();
+};
