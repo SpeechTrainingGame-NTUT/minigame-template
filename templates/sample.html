@@ -30,24 +30,76 @@
       gap: 10px;
     }
     .button-group button,
-  .button-group a {
-    flex: 1; /* 各ボタンの幅を均等にする */
-    text-align: center; /* テキストを中央に配置 */
-  }
+    .button-group a {
+      width: 48%;
+      text-align: center;
+    }
     .btn-primary {
       background-color: #007bff;
       color: white;
     }
     .btn-home {
-      background-color: #007bff; /* 青 */
+      background-color: #007bff;
       color: white;
       border: none;
     }
     .btn-home:hover,
     .btn-home:active {
-      background-color: #0056b3; /* 暗い青 */
+      background-color: #0056b3;
     }
   </style>
+</head>
+
+  <script>
+    async function synthesizeSpeech() { // クリック時に音声合成を実行
+      const text = document.getElementById("txt").value.trim(); // 入力されたテキストを取得 (#txt の値)し、前後の空白を削除
+
+      // 選択された声のタイプ（男性・女性） と 読み上げ速度（デフォルト1.0） を取得
+      const voiceType = document.getElementById("voice").value;
+      const rate = parseFloat(document.getElementById("rate").value) || 1.0;
+
+      if (!text) {
+        alert("テキストを入力してください");
+        return;
+      }
+
+      const apiKey = "AIzaSyCZJewvuyz1b8amTCLqJrX6M66TpymXRLY";  // ここにAPIキーを設定
+      const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+
+      const requestBody = { // API に送るリクエストのデータを設定
+        input: { text: text }, // 入力された文章
+        voice: {
+          languageCode: "ja-JP",
+          name: voiceType,
+          ssmlGender: voiceType.includes("-B") ? "FEMALE" : "MALE" // -B（女性）なら "FEMALE"、-C（男性）なら "MALE"
+        },
+        audioConfig: {
+          audioEncoding: "mp3", // MP3 フォーマットの音声データを取得
+          speakingRate: rate
+        }
+      };
+
+      try {
+        const response = await fetch(url, { // Google API に POST リクエストを送信
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+        if (data.audioContent) {
+          const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+          audio.play();
+        } else {
+          alert("音声合成に失敗しました");
+          console.error("APIエラー:", data);
+        }
+      } catch (error) {
+        console.error("APIリクエストエラー:", error);
+        alert("エラーが発生しました。");
+      }
+    }
+  </script>
 </head>
 <body class="container">
   <div class="row justify-content-center">
@@ -58,107 +110,29 @@
         音声合成を開始したい場合は、「開始」を押してください。<br>
         ブラウザが単語を読み間違えることがあるので、その際は片仮名で聴きたい言葉を入力してください。<br>
         薄い灰色で書かれているのは入力の例です。<br>
-        声のタイプで、女性のものを聴きたい場合は「Kyoko (日本語)」を、男性のものを聴きたい場合は<br>
-        「Hattori (日本語)」を選択してください
+        声のタイプは女性か男性のものを選択します。<br>
       </p>
-      
       <div class="content">
         <label for="rate">速さ(0.1 - 2.0, デフォルト：1.0)</label>
         <input id="rate" type="number" class="form-control" step="0.1" min="0.1" max="2.0">
       </div>
-      
+
       <div class="content">
         <label for="voice">声のタイプ</label>
         <select id="voice" class="form-select">
-          <!-- 音声リストはJavaScriptで動的に追加されます -->
+          <option value="ja-JP-Standard-B">女性</option>
+          <option value="ja-JP-Standard-C">男性</option>
         </select>
       </div>
-      
+
       <div class="content">
         <label for="txt">聴きたい言葉</label>
         <input id="txt" type="text" class="form-control" placeholder="生麦生米生卵">
       </div>
-      
+    
       <div class="button-group">
-        <button id="btn" class="btn btn-primary">開始</button>
-        <a href="{{ url_for('index') }}" class="btn btn-home w-100">
-          ホーム画面へ
-        </a>
+        <button id="btn" class="btn btn-primary" onclick="synthesizeSpeech()">開始</button>
+        <a href="{{ url_for('index') }}" class="btn btn-home">ホーム画面へ</a>
       </div>
-    </div>
-  </div>
-  
-  <script>
-    const btn = document.getElementById("btn");
-    const voiceSelect = document.getElementById("voice");
-
-    // デバイスに応じた音声リストを設定
-    function populateVoiceList() {
-      const voices = window.speechSynthesis.getVoices();
-      voiceSelect.innerHTML = '';
-
-      // Mac用の音声リスト
-      const macVoices = [
-        { name: "Kyoko", description: "Kyoko (日本語)" },
-        { name: "Hattori", description: "Hattori (日本語)" }
-      ];
-
-      // その他のデバイス用（Windows/Linux）
-      const otherVoices = voices.filter(voice => voice.lang.includes("ja")).map(voice => ({
-        name: voice.name,
-        description: `${voice.name} (${voice.lang})`
-      }));
-
-      // デバイス判定
-      const isMac = navigator.userAgent.includes("Mac");
-      const targetVoices = isMac ? macVoices : otherVoices;
-
-      // 音声リストをセレクトボックスに追加
-      targetVoices.forEach(({ name, description }) => {
-        const option = document.createElement("option");
-        option.value = name;
-        option.textContent = description;
-        voiceSelect.appendChild(option);
-      });
-
-      // 音声が見つからない場合の対応
-      if (voiceSelect.options.length === 0) {
-        const option = document.createElement("option");
-        option.value = "";
-        option.textContent = "音声が見つかりません";
-        voiceSelect.appendChild(option);
-      }
-    }
-
-    // 「読み上げる」ボタンの動作
-    btn.addEventListener("click", () => {
-      const synth = new SpeechSynthesisUtterance();
-      const txt = document.getElementById("txt").value;
-      const rateInput = document.getElementById("rate").value;
-      const selectedVoiceName = voiceSelect.value;
-
-      if (!txt) {
-        alert("読み上げるテキストを入力してください！");
-        return;
-      }
-
-      synth.text = txt;
-      synth.rate = parseFloat(rateInput) || 1.0;
-
-      const voices = window.speechSynthesis.getVoices();
-      const selectedVoice = voices.find(voice => voice.name === selectedVoiceName);
-      if (selectedVoice) {
-        synth.voice = selectedVoice;
-      }
-
-      window.speechSynthesis.speak(synth);
-    });
-
-    // 音声リストの更新
-    window.speechSynthesis.onvoiceschanged = populateVoiceList;
-
-    // 初期ロード時に音声リストを取得
-    populateVoiceList();
-  </script>
 </body>
 </html>
