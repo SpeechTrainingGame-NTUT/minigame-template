@@ -1,107 +1,177 @@
-var socket = io.connect('http://localhost:8080');
-var threshold = 0;
-var timer;
-var elapsedTime = 0;
-var isDetecting = false; 
-var isDetecting = false;
-var hasExceededThreshold = false;
-var thresholdPlusTwo = 0; // しきい値+2dBを保持する変数
+let audioContext;
+let microphone;
+let processor;
+let isRecording = false;
+let threshold = 0;
+let thresholdPlusTwo = 0;
+let startTime = null;
+let elapsedTime = 0.0;
+let timerInterval = null;
+let isStopped = false;  // バーの固定フラグ
+let fixedVolumeWidth = ""; // 固定されたバーの幅
+let firstThresholdExceeded = false; // 初めてしきい値を超えたかどうかのフラグ
 
-socket.on('connect', function() {
-  console.log('Connected to server');
-  socket.emit('start_monitoring');
-});
-
-socket.on('audio_data', function(data) {
-  if (!isDetecting) return; // 開始ボタンが押されるまで動作しない
-
-  console.log('Received audio data:', data);
-  var dB = data.power;
-  document.getElementById('volume').style.width = (dB / 100 * 100) + '%';
-  console.log('dB: ' + dB);
-
-  if (threshold > 0 && dB > threshold) {
-    if (!hasExceededThreshold) {
-      hasExceededThreshold = true; // しきい値を初めて超えた
-      startTimer();
-    }
-  } else if (hasExceededThreshold && dB < threshold) {
-    stopTimer();
-    isDetecting = false; // カウントを再開しない
-  }
-
-  // しきい値+2dBを超えた場合にカウントを停止
-  if (dB > thresholdPlusTwo) {
-    stopTimer();
-    isDetecting = false;
-  }
-});
-
-socket.on('disconnect', function() {
-  console.log('Disconnected from server');
-  socket.emit('stop_monitoring');
-});
-
-function dBToLinear(dB) {
-  return Math.pow(10, dB / 20);
-}
+document.getElementById("threshold").addEventListener("change", setThreshold);
+document.querySelector(".btn-start").addEventListener("click", startRecording);
 
 function setThreshold() {
-  const dBValue = parseFloat(document.getElementById('threshold').value);
-  threshold = dBValue;
-  thresholdPlusTwo = threshold + 2; // しきい値+2dBを設定
-  resetTimer();
-
-  //しきい値が設定されたら音声認識を開始
-  const meterContainer = document.querySelector('.meter-container');
-  let blueLine = document.querySelector('.threshold-line.blue');
-  if (!blueLine) {
-    blueLine = document.createElement('div');
-    blueLine.className = 'threshold-line blue';
-    meterContainer.appendChild(blueLine);
-  }
-  blueLine.style.left = `${(thresholdPlusTwo / 100) * 100}%`;
-  blueLine.style.backgroundColor = 'blue';
-
-  if(threshold > 0){
-    socket.emit('start_monitoring');
-  }
+    threshold = parseInt(document.getElementById("threshold").value, 10);
+    thresholdPlusTwo = threshold + 2;
+    console.log(`しきい値設定: ${threshold} dB, 上限: ${thresholdPlusTwo} dB`);
+    updateThresholdLines();
 }
 
-function startTimer() {
-  timer = setInterval(() => {
-    elapsedTime += 0.01; // 0.01秒ずつ増加
-    const elapsedTimeElement = document.getElementById('elapsedTime');
-    if (elapsedTimeElement) {
-      elapsedTimeElement.innerText = '経過時間: ' + elapsedTime.toFixed(2) + '秒'; // 小数第2位まで表示
+async function startRecording() {
+    if (isRecording) return;
+    isRecording = true;
+    isStopped = false;  // 初期状態でフラグ解除
+    firstThresholdExceeded = false; // しきい値超えフラグもリセット
+    elapsedTime = 0.0; // 経過時間リセット
+    updateElapsedTime();
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+        });
+
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        microphone = audioContext.createMediaStreamSource(stream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        processor.onaudioprocess = (event) => {
+            if (isStopped) return; // 停止フラグが立ったら処理しない
+            const inputBuffer = event.inputBuffer.getChannelData(0);
+            const int16Array = floatTo16BitPCM(inputBuffer);
+            sendAudioData(int16Array);
+        };
+
+        microphone.connect(processor);
+        processor.connect(audioContext.destination);
+    } catch (error) {
+        console.error("マイクへのアクセスに失敗しました:", error);
     }
-  }, 10); // 10ミリ秒ごとに更新
 }
 
-function stopTimer() {
-  clearInterval(timer);
-  timer = null;
+function floatTo16BitPCM(inputBuffer) {
+    const int16Array = new Int16Array(inputBuffer.length);
+    for (let i = 0; i < inputBuffer.length; i++) {
+        int16Array[i] = Math.max(-32768, Math.min(32767, inputBuffer[i] * 32768));
+    }
+    return int16Array;
 }
 
-function resetTimer() {
-  stopTimer();
-  elapsedTime = 0;
-  const elapsedTimeElement = document.getElementById('elapsedTime');
-  if (elapsedTimeElement) {
-    elapsedTimeElement.innerText = '経過時間: 0秒';
+async function sendAudioData(data) {
+    if (isStopped) return; // 停止フラグが立っていたら送信を行わない
+
+    try {
+        const response = await fetch("/sustainability_of_voice/audio", {
+            method: "POST",
+            headers: { "Content-Type": "application/octet-stream" },
+            body: data.buffer,
+        });
+
+        if (response.ok) {
+            const { db } = await response.json();
+            handleThresholdCheck(db);
+        }
+    } catch (error) {
+        console.error("音声データ送信中のエラー:", error);
+    }
+}
+
+function updateVolumeDisplay(db) {
+  console.log(`バーの更新 - dB: ${db}`); // ★ バーの更新時の dB を表示
+  const volumeBar = document.getElementById("volume");
+
+  if (isStopped) {
+      console.log("バーは停止しているため、更新しません。");
+      volumeBar.style.width = fixedVolumeWidth;
+      return;
   }
+
+  const clampedDb = Math.max(0, Math.min(db, 120));
+  const displayDb = Math.min(clampedDb, 100);
+  const scaledDb = (displayDb / 100) * 100;
+
+  volumeBar.style.width = `${scaledDb}%`;
 }
 
-function beginDetect() {
-  if (threshold > 0) {
-    isDetecting = true; // 開始ボタンが押されたら動作を開始
-    hasExceededThreshold = false; // フラグをリセット
-    socket.emit('start_monitoring');
-  } else {
-    alert('しきい値を設定してください。');
+function handleThresholdCheck(db) {
+  console.log(`現在の声量: ${db} dB`);
+
+  if (db > thresholdPlusTwo) {
+      console.log("しきい値+2dBを超えました。バーとカウントを停止します。");
+      stopBar(db);
+      return;
   }
+
+  if (!isStopped && db >= threshold && db <= thresholdPlusTwo) { // 停止中は実行しない
+      if (!firstThresholdExceeded) {
+          firstThresholdExceeded = true;
+          console.log("初めてしきい値を超えました。カウントを開始します。");
+      }
+      if (!startTime) {
+          startTime = Date.now();
+          timerInterval = setInterval(() => {
+              elapsedTime = ((Date.now() - startTime) / 1000).toFixed(2);
+              updateElapsedTime();
+          }, 10);
+      }
+  } else if (!isStopped && firstThresholdExceeded && db < threshold) {
+      console.log("しきい値未満になったため、カウントを停止します。");
+      stopBar(db);
+  }
+
+  updateVolumeDisplay(db);
 }
 
-function goBack() {
-  window.location.href = "../../index.html";
+function stopBar(db) {
+  if (isStopped) return; // すでに停止している場合は処理しない
+
+  console.log(`バーを停止 - 固定値: ${db} dB`);
+  isStopped = true;
+  isRecording = false; // 録音も停止
+  firstThresholdExceeded = false;
+
+  if (startTime) {
+      clearInterval(timerInterval);
+      startTime = null;
+  }
+
+  const volumeBar = document.getElementById("volume");
+  const clampedDb = Math.max(0, Math.min(db, 120));
+  const displayDb = Math.min(clampedDb, 100);
+  fixedVolumeWidth = `${(displayDb / 100) * 100}%`;
+
+  volumeBar.style.width = fixedVolumeWidth;
+
+  clearInterval(timerInterval);
+  updateElapsedTime();
 }
+
+function updateElapsedTime() {
+    document.getElementById("elapsedTime").textContent = `経過時間: ${elapsedTime}秒`;
+}
+
+// しきい値ラインの更新
+function updateThresholdLines() {
+    document.querySelectorAll(".threshold-line.dynamic").forEach(line => line.remove());
+
+    const meterContainer = document.querySelector(".meter-container");
+
+    function createThresholdLine(db, color) {
+        const line = document.createElement("div");
+        line.classList.add("threshold-line", "dynamic");
+        line.style.backgroundColor = color;
+        line.style.left = `${(db / 100) * 100}%`;
+        meterContainer.appendChild(line);
+    }
+
+    if (threshold > 0) createThresholdLine(threshold, "red");
+    if (thresholdPlusTwo > 0) createThresholdLine(thresholdPlusTwo, "blue");
+}
+
+window.onload = function () {
+    elapsedTime = 0.0;
+    updateElapsedTime();
+};
