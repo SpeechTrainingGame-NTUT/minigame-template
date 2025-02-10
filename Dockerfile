@@ -2,6 +2,9 @@ FROM python:3.9-slim
 
 # 必要なライブラリをインストール
 RUN apt-get update && apt-get install -y \
+    g++ \
+    build-essential \
+    python3-dev \
     portaudio19-dev \
     libasound2-dev \
     libsndfile1 \
