@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>発話チェック</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans JP', sans-serif !important;
+    }
+    .instruction-box {
+      border: 2px solid #000;
+      padding: 15px;
+      margin-top: 20px;
+      margin-left: auto;
+      margin-right: auto;
+      max-width: 600px; /* 最大幅を設定 */
+      border-radius: 8px;
+      background-color: #f8f9fa;
+    }
+    /* ボタンの基本スタイル */
+    .btn-custom-danger, .btn-custom-secondary, .btn-custom-word-registration {
+      width: 320px; /* 横幅を統一 */
+      padding: 10px 20px;
+      text-align: center;
+    }
+    /* A: 制限時間が経過したら終了 */
+    .btn-custom-danger {
+      background-color: #800080;
+      border-color: #800080;
+      color: white;
+      transition: background-color 0.3s;
+    }
+    .btn-custom-danger:hover, .btn-custom-danger:active {
+      background-color: #993399 !important;
+      border-color: #993399 !important;
+      color: white !important;
+      opacity: 0.8;
+    }
+    /* B: 1度でもミスをしたら終了 */
+    .btn-custom-secondary {
+      background-color: #6c757d;
+      border-color: #6c757d;
+      color: white;
+      transition: background-color 0.3s;
+    }
+    .btn-custom-secondary:hover, .btn-custom-secondary:active {
+      background-color: #6c757d !important;
+      border-color: #6c757d !important;
+      color: white !important;
+      opacity: 0.8;
+    }
+    /* 気になった単語を登録 */
+    .btn-custom-word-registration {
+      background-color: #218838;
+      border-color: #218838;
+      color: white;
+      transition: background-color 0.3s;
+    }
+    .btn-custom-word-registration:hover, .btn-custom-word-registration:active {
+      background-color: #1c7430;
+      border-color: #1c7430;
+      color: white !important;
+      opacity: 0.8;
+    }
+    /* ホーム画面へ */
+    .btn-primary.btn-home {
+      background-color: #007bff;
+      border-color: #007bff;
+      color: white;
+      transition: background-color 0.3s;
+      width: auto; /* ボタン内容に応じた幅 */
+      padding: 10px 15px; /* 余白を調整 */
+    }
+    .btn-primary.btn-home:hover, .btn-primary.btn-home:active {
+      background-color: #0056b3 !important;
+      border-color: #0056b3 !important;
+      color: white !important;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+
+<body class="container py-4">
+  <h2 class="mb-4 text-center">発話チェックでは3つのモードがあります</h2>
+  <div class="d-flex flex-column align-items-center gap-3 mb-4">
+    <a href="{{ url_for('utterance_check.check_a') }}" class="btn btn-custom-danger btn-lg">
+      A: 制限時間が経過したら終了
+    </a>
+    <a href="{{ url_for('utterance_check.check_b') }}" class="btn btn-custom-secondary btn-lg">
+      B: 一度でもミスをしたら終了
+    </a>
+    <a href="{{ url_for('utterance_check.word_registration') }}" class="btn btn-custom-word-registration btn-lg">
+      気になった単語を登録
+    </a>
+  </div>
+
+  <div class="instruction-box mt-5">
+    <h3><i class="fas fa-info-circle me-2"></i>プレイ方法</h3>
+    <ul>
+      <li>「A: 制限時間が経過したら終了」または「B: 一度でもミスをしたら終了」を選択してください。</li>
+      <li>ブラウザでマイクのアクセス許可を事前に有効化してください。</li>
+      <li>プレイ画面に表示された単語を声に出して読んでください。</li>
+      <ul>
+        <li>正しく読めた場合: 「正解！！！」と表示されます。</li>
+        <li>間違えた場合: 「残念！！！」と表示されます。</li>
+      </ul>
+      <li>出題単語は以下の設定が可能です:</li>
+      <ul>
+        <li>登録した気になった単語のみ</li>
+        <li>デフォルトの単語のみ</li>
+        <li>登録した気になった単語とデフォルト単語の両方</li>
+      </ul>
+      <li>登録する単語は平仮名で記入してください。漢字が含まれると判定エラーになる可能性があります。</li>
+    </ul>
+  </div>
+  
+  <div class="text-center mt-4">
+    <a href="{{ url_for('index') }}" class="btn btn-primary btn-home btn-lg">
+      ホーム画面へ
+    </a>
+  </div>
+
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

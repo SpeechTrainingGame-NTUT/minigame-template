@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>声の持続力 チャレンジ ハードモード</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    .meter-container {
+      width: 100%;
+      max-width: 1500px;
+      margin: 20px auto;
+      border: 1px solid black;
+      position: relative;
+      height: 20px;
+    }
+    #volume {
+      position: absolute;
+      left: 0;
+      height: 100%;
+      background: black;
+    }
+    .threshold-line {
+      position: absolute;
+      height: 20px;
+      width: 2px;
+      background-color: red;
+    }
+    .threshold-line.thick {
+      width: 4px;
+    }
+    .threshold-line.blue {
+      position: absolute;
+      height: 20px;
+      width: 2px;
+      background-color: red;
+    }
+    .threshold-line.blue.thick {
+      width: 4px;
+    }
+    .btn-start {
+      background-color: #28a745 !important;
+      border-color: #28a745 !important;
+      color: white !important;
+    }
+    .btn-start:hover {
+      background-color: #218838 !important;
+      border-color: #1e7e34 !important;
+      color: white !important;
+    }
+    .btn-start:active, .btn-start:focus {
+      background-color: #218838 !important;
+      border-color: #1e7e34 !important;
+      color: white !important;
+      outline: none !important;
+    }
+    .btn-custom-primary {
+      background-color: #007bff !important;
+      border-color: #007bff !important;
+      color: white !important;
+    }
+    .btn-custom-primary:hover {
+      background-color: #0069d9 !important;
+      border-color: #0062cc !important;
+      color: white !important;
+    }
+    .no-border {
+      border: none;
+      padding: 0;
+    }
+    .mt-4 {
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body class="text-center">
+  <div class="container mt-4">
+    <h2>ハードモード</h2>
+    <h4 class="mb-4">
+      どのくらい長く声を出せるか、ボリュームメーターを使って試してみましょう。<br>
+      発話を始めた時点で、経過時間のカウントが始まりますので、<br>「開始」ボタンを押してください。<br>
+      このページをリロードすれば、リセットが可能です。<br>しきい値...声の認識が始まる声の大きさ
+    </h4>
+    
+    <label for="threshold">しきい値</label>
+    <select id="threshold" class="form-select mb-3" onchange="setThreshold()" style="width: auto; margin: 0 auto;">
+      <option value="" disabled selected>選択してください</option>
+      <option value="45">簡単(45dB)</option>
+      <option value="60">普通(60dB)</option>
+      <option value="75">難しい(75dB)</option>
+      <option value="90">地獄(90dB)</option>
+    </select>
+
+    <div class="meter-container">
+      <div id="volume"></div>
+      <span style="position: absolute; left: 0%; top: 20px; transform: translateX(-50%); font-size: 12px;">0dB</span> 
+    
+      <span style="position: absolute; left: 45%; top: 20px; transform: translateX(-50%); font-size: 12px;">45dB</span>
+      <div class="threshold-line" style="left: 45%; background-color: red;"></div>
+    
+      <span style="position: absolute; left: 60%; top: 20px; transform: translateX(-50%); font-size: 12px;">60dB</span>
+      <div class="threshold-line" style="left: 60%; background-color: red;"></div>
+    
+      <span style="position: absolute; left: 75%; top: 20px; transform: translateX(-50%); font-size: 12px;">75dB</span>
+      <div class="threshold-line" style="left: 75%; background-color: red;"></div>
+    
+      <span style="position: absolute; left: 90%; top: 20px; transform: translateX(-50%); font-size: 12px;">90dB</span>
+      <div class="threshold-line" style="left: 90%; background-color: red;"></div>
+    
+      <span style="position: absolute; left: 100%; top: 20px; transform: translateX(-50%); font-size: 12px;">100dB</span>
+    </div>
+
+    <p id="elapsedTime">経過時間: 0秒</p>
+    <button onclick="beginDetect()" class="btn btn-start"><i class="fas fa-play"></i> 開始</button>
+
+    <p id="output"></p>
+    <button onclick="goBack()" class="no-border">
+      <a href="{{ url_for('sustainability_of_voice.index', _external=False) }}?mode=normal">ノーマルモードへ</a>
+      <a href="{{ url_for('index') }}" class="btn btn-custom-primary w-100">
+        <i class="fas fa-home me-2"></i>ホーム画面へ
+      </a>
+    </button>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+  <script src="{{ url_for('static', filename='js/hard.js') }}"></script>
+</body>
+</html>
+

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>発話チェックA</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+
+  <!-- Axios CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script src="{{ url_for('static', filename='js/checkA.js') }}"></script>
+
+  <style>
+    body { font-family: 'Noto Sans JP', sans-serif !important; }
+    .hidden { display: none; }
+    .simple-section { max-width: 720px; margin: 0 auto 1.8rem; }
+    .options-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: .5rem; }
+    .btn-group-vertical { display: flex; flex-direction: column; gap: .5rem; align-items: stretch; }
+    .btn-custom-success {
+      background-color: #28a745; border-color: #28a745; color: #fff; transition: opacity .3s;
+    }
+    .btn-custom-success:hover, .btn-custom-success:active {
+      background-color: #28a745 !important; border-color: #28a745 !important; color: #fff !important; opacity: .8 !important;
+    }
+    .btn-custom-primary {
+      background-color: #007bff; border-color: #007bff; color: #fff; transition: opacity .3s;
+    }
+    .btn-custom-primary:hover, .btn-custom-primary:active {
+      background-color: #007bff !important; border-color: #007bff !important; color: #fff !important; opacity: .8 !important;
+    }
+    #result { font-size: 24px; color: green; }
+    #phoneme { font-size: 20px; color: blue; }
+  </style>
+</head>
+
+<body>
+  <div class="container mt-5">
+
+    <!-- ===== 設定画面 ===== -->
+    <section id="initial-screen">
+
+      <!-- 目標の正解数（カード＋内枠） -->
+      <div class="simple-section">
+        <div class="card">
+          <div class="card-body">
+            <label class="form-label">目標の正解数</label>
+            <div class="options-row mb-2">
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="target1" name="targetCorrect" value="5">
+                <label for="target1" class="ms-1 mb-0">5</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="target2" name="targetCorrect" value="10">
+                <label for="target2" class="ms-1 mb-0">10</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="target3" name="targetCorrect" value="15">
+                <label for="target3" class="ms-1 mb-0">15</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="target4" name="targetCorrect" value="20">
+                <label for="target4" class="ms-1 mb-0">20</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="target5" name="targetCorrect" value="25">
+                <label for="target5" class="ms-1 mb-0">25</label>
+              </div>
+            </div>
+            <input type="number" id="targetInput" class="form-control"
+              placeholder="入力欄(上記以外の値はこちらで入力)">
+          </div>
+        </div>
+      </div>
+
+      <!-- 制限時間（秒）（カード＋内枠） -->
+      <div class="simple-section">
+        <div class="card">
+          <div class="card-body">
+            <label class="form-label">制限時間（秒）</label>
+            <div class="options-row mb-2">
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="time1" name="timer" value="20">
+                <label for="time1" class="ms-1 mb-0">20</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="time2" name="timer" value="40">
+                <label for="time2" class="ms-1 mb-0">40</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="time3" name="timer" value="60">
+                <label for="time3" class="ms-1 mb-0">60</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="time4" name="timer" value="80">
+                <label for="time4" class="ms-1 mb-0">80</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="checkbox" id="time5" name="timer" value="100">
+                <label for="time5" class="ms-1 mb-0">100</label>
+              </div>
+            </div>
+            <input type="number" id="timerInput" class="form-control"
+                    placeholder="入力欄(上記以外の値はこちらで入力)">
+          </div>
+        </div>
+      </div>
+
+      <!-- 追加：単語出題タイプ選択 -->
+      <div class="simple-section">
+        <div class="card">
+          <div class="card-body">
+            <label class="form-label">出題する単語の種類</label>
+            <div class="options-row mb-2">
+              <div class="d-flex align-items-center">
+                <input type="radio" id="wordType1" name="wordType" value="default" checked>
+                <label for="wordType1" class="ms-1 mb-0">気になった単語のみ</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="radio" id="wordType2" name="wordType" value="registered">
+                <label for="wordType2" class="ms-1 mb-0">生成単語</label>
+              </div>
+              <div class="d-flex align-items-center">
+                <input type="radio" id="wordType3" name="wordType" value="both">
+                <label for="wordType3" class="ms-1 mb-0">気になった単語と生成単語の両方</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ボタン（開始・戻る・ホーム） -->
+      <div class="simple-section btn-group-vertical">
+        <button id="start-button" class="btn btn-custom-success">▶️開始</button>
+        <a href="{{ url_for('utterance_check.index') }}" class="btn btn-custom-primary">◀️戻る</a>
+        <a href="{{ url_for('index') }}" class="btn btn-custom-primary">🏠ホーム画面へ</a>
+        <div id="warning" class="alert alert-danger hidden mt-3">目標の正解数と制限時間を設定してください。</div>
+      </div>
+    </section>
+
+    <!-- ローディング表示 -->
+    <div id="loading" class="alert alert-info text-center hidden">
+      単語を生成中です。しばらくお待ちください...
+    </div>
+
+    <!-- ===== プレイ画面 ===== -->
+    <section id="playing-screen" class="hidden">
+      <div class="row justify-content-center">
+        <div class="col-md-8">
+          <div class="card">
+            <div class="card-body">
+              <h2 id="timerDisplay" class="text-center mb-4"></h2>
+              <button id="wordDisplay" class="btn btn-lg btn-outline-primary w-100 mb-4 btn-word-display" disabled></button>
+              <div id="textLog" class="alert alert-info"></div>
+              <p id="result"></p>
+              <p id="phoneme"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,15 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'gcr.io/$minigame-template/minigame-template', '.']
+
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', 'gcr.io/$minigame-template/minigame-template']
+
+- name: 'gcr.io/cloud-builders/gcloud'
+  args: [
+    'run', 'deploy', 'minigame-template',  # Cloud Runのサービス名
+    '--image', 'gcr.io/$minigame-template/minigame-template',  # イメージ名に$PROJECT_IDを使用
+    '--region', 'us-central1',
+    '--platform', 'managed',
+    '--allow-unauthenticated'
+  ]

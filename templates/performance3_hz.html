@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ラン&ジャンプ レベル3(声の高さ)</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Noto Sans JP', sans-serif !important;
+        }
+        .volume-bar-container {
+            width: 80%;
+            max-width: 1500px;
+            margin: 20px auto;
+            height: 20px;
+            border: 1px solid #000;
+            position: relative;
+        }
+        #volume-bar {
+            position: absolute;
+            left: 0;
+            height: 100%;
+            background-color: #000;
+        }
+        .marker {
+            position: absolute;
+            height: 100%;
+            width: 2px;
+            background: red;
+            top: 0;
+        }
+        .label {
+            position: absolute;
+            font-size: 12px;
+            color: black;
+            text-align: center;
+            transform: translateX(-50%);
+            top: 100%;
+            margin-top: 2px;
+        }
+        canvas {
+            border: 1px solid black;
+            display: block;
+            margin: 20px auto;
+        }
+        #message {
+            display: none;
+        }
+        .btn-start {
+            background-color: #28a745; /* 緑色の背景 */
+            color: white;
+            transition: opacity 0.3s;
+        }
+        .btn-start:hover, .btn-start:active{
+            background-color: #28a745 !important; /* 緑色の背景 */
+            color: white !important;
+            opacity: 0.3s !important;
+        }
+        .btn-level {
+            background-color: #fd7e14; /* オレンジ色の背景 */
+            color: white;
+            transition: opacity 0.3s;
+        }
+        .btn-level:hover, .btn-level:active {
+            background-color: #fd7e14 !important; /* オレンジ色の背景 */
+            color: white !important;
+            opacity: 0.3s !important;
+        }
+        .btn-primary{
+            background-color: #007bff;
+            border-color: #007bff;
+            color: white;
+            transition: background-color 0.3s;
+        }
+        .btn-primary:hover, .btn-primary:active{
+            background-color: #007bff !important;
+            border-color: #007bff !important;
+            color: white !important;
+            opacity: 0.8;
+        }
+        .button-group {
+            display: flex;
+            justify-content: center;
+            gap: 10px; /* ボタン間の間隔 */
+            width: 800px; /* gameCanvasの幅に合わせる */
+            margin: 0 auto; /* 中央揃え */
+        }
+    </style>
+</head>
+<body class="container text-center">
+    <h1 class="my-4">レベル3(声の高さ)</h1>
+
+    <div class="button-group mb-4">
+        <a id="startButton" class="btn btn-start"><i class="fas fa-play"></i> 開始</a>
+        <a href="{{ url_for('voice_jump_hz.index') }}" class="btn btn-level"><i class="fa-solid fa-stairs"></i> 別のレベルに挑戦</a>
+        <a href="{{ url_for('index') }}" class="btn btn-primary"><i class="fas fa-home me-2"></i> ホーム画面へ</a>
+    </div>
+
+    <div class="volume-bar-container">
+        <div id="volume-bar"></div>
+        <div class="label" style="left: 0%;">0Hz</div>
+        <div class="marker" style="left: 33.33%"></div>
+        <div class="label" style="left: 33.33%;">100Hz</div>
+        <div class="marker" style="left: 66.66%"></div>
+        <div class="label" style="left: 66.66%">200Hz</div>
+        <div class="label" style="left: 100%;">300Hz</div>
+    </div>
+
+    <h2></h2>
+
+    <canvas id="gameCanvas" width="800" height="350"></canvas>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        window.onload = function () {
+            player.x = 0; // 左端に配置（0にすると枠の外になる可能性がある）
+            player.y = platforms[0].y - player.height; // 足場の上に配置
+            drawGame();  // 初期状態でゲーム画面を描画
+        };
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const player = {
+            x: 0,
+            y: 0,
+            width: 20,
+            height: 20,
+            speed: 8,
+            jumpPower: 8,
+            dy: 0,
+            onGround: true
+        };
+
+        const gravity = 1.0;
+        const platforms = [
+            { x: 0, y: 220, width: 300, height: 200 },
+            { x: 400, y: 220, width: 500, height: 200 }
+        ];
+        let goal = { x: 780, y: 200, width: 20, height: 20 };
+        let gameRunning = false;
+
+        let coinData = [
+            { x: 280, y: platforms[0].y - 8, radius: 8, color: 'red', points: 30 },
+            { x: 420, y: platforms[1].y - 8, radius: 8, color: 'red', points: 30 },
+
+            { x: 230, y: 60, radius: 8, color: 'blue', points: 20 },
+            { x: 330, y: 40, radius: 8, color: 'blue', points: 20 },
+
+            { x: 150, y: 150, radius: 8, color: 'yellow', points: 10 },
+            { x: 70, y: platforms[0].y - 8, radius: 8, color: 'yellow', points: 10 },
+            { x: 500, y: 30, radius: 8, color: 'yellow', points: 10 },
+            { x: 600, y: platforms[1].y - 8, radius: 8, color: 'yellow', points: 10 },
+            { x: 650, y: 80, radius: 8, color: 'yellow', points: 10 },
+            { x: 700, y: platforms[1].y - 8, radius: 8, color: 'yellow', points: 10 }
+        ];
+
+        let startTime;
+        let coinScore = 0;
+        let collectedCoins = { red: 0, blue: 0, yellow: 0 };
+
+        let isGoalReached = false;
+        let isAbove200Hz = false;
+        let lastFrequencyUpdateTime = 0;
+        const frequencyUpdateInterval = 100;
+
+        let audioContext;
+        let analyser;
+        let microphone;
+        let javascriptNode;
+        let scriptProcessor;
+        let recording = false;
+
+        async function startMicrophone() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new AudioContext();
+                const sampleRate = audioContext.sampleRate; // サンプリングレートを取得
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+                scriptProcessor = audioContext.createScriptProcessor(8192, 1, 1); // bufferSizeを1024に変更
+
+                analyser.fftSize = 2048;
+                microphone.connect(analyser);
+                analyser.connect(scriptProcessor);
+                scriptProcessor.connect(audioContext.destination);
+
+                scriptProcessor.onaudioprocess = function (event) {
+                    if (!recording) return;
+                    const buffer = event.inputBuffer.getChannelData(0);
+                    sendAudioData(buffer, sampleRate); // サンプリングレートを送る
+                };
+            } catch (err) {
+                console.error("マイクのアクセスに失敗しました:", err);
+            }
+        }
+
+        function sendAudioData(buffer, sampleRate) {
+            const float32Array = new Float32Array(buffer);
+            const blob = new Blob([float32Array], { type: 'application/octet-stream' });
+
+            const formData = new FormData();
+            formData.append('audio', blob);
+            formData.append('sample_rate', sampleRate); // サンプリングレートを送信
+
+            fetch('/voice_jump_hz/process_audio', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateGame(data.frequency);
+                updateVolumeBar(data.frequency);
+            })
+            .catch(error => console.error('Error sending audio:', error));
+        }
+
+        async function updateGame(frequency) {
+            if (!gameRunning || isGoalReached) return; // 周波数計算が停止していれば処理を中断
+
+            if (
+                player.x >= 760 &&
+                player.x <= goal.x + goal.width &&
+                player.x + player.width >= goal.x &&
+                player.y + player.height >= goal.y
+            ) {
+                isGoalReached = true; // フラグをセット
+                player.dx = 0; // 水平移動停止
+                player.dy = 0; // 垂直移動停止
+                endGame(true);
+                return; // 処理終了
+            }
+
+            if (player.x + player.width > canvas.width) {
+                console.log('Game over: player.x exceeded goal.x + goal.width');
+                endGame(false);
+                return; // 処理終了
+            }
+
+            if (player.y + player.height > canvas.height) {
+                player.y = canvas.height - player.height;
+                player.dy = 0;
+                endGame(false);
+            }
+
+            const currentTime = performance.now();
+            if (currentTime - lastFrequencyUpdateTime >= frequencyUpdateInterval) {
+                lastFrequencyUpdateTime = currentTime;
+
+                if (frequency >= 200) {
+                    isAbove200Hz = true; // 200Hz以上に切り替え
+                    if (player.onGround) {
+                        player.dy = -player.jumpPower; // ジャンプ力を設定                    
+                        player.onGround = false; // 空中状態に設定
+                    } else {
+                        // 周波数が200Hz以上の間、dyを1.0ずつ増加
+                        player.dy -= 1.0; // 上昇中の速度を増加させる
+                    }
+                    // x座標を増加させる（水平移動）
+                    player.x += player.speed;
+                } else if (frequency < 200 && frequency >= 100) {
+                    if (isAbove200Hz) {
+                        player.dy = 0; // 200Hz以上から100Hz台に変化したらdyをリセット
+                    }
+                    isAbove200Hz = false; // 状態をリセット
+                    player.dy += 1.0; 
+                    // 前進処理
+                    if (player.onGround) {
+                        player.x += player.speed;
+                    }
+                } else {
+                    isAbove200Hz = false;
+                    player.dy += 1.0;
+                }
+
+                player.y += player.dy;
+
+                // プレイヤーの上方向の制限
+                if (player.y < 0) {
+                    player.y = 0;
+                    player.dy = 0;
+                }
+
+                // 横方向の移動
+                if (frequency >= 100 && frequency < 200 && player.onGround) {
+                    player.x += player.speed; // 前進
+                }
+
+                // 足場との接触判定（下降中のみ）
+                let onAnyPlatform = false;
+                platforms.forEach((platform) => {
+                    console.log(`Platform Position: platform.x=${platform.x}, platform.y=${platform.y}`); // 足場の位置を表示
+                    if (
+                        player.x < platform.x + platform.width &&
+                        player.x + player.width > platform.x &&
+                        player.y + player.height >= platform.y &&
+                        player.y + player.height <= platform.y + 30 &&
+                        player.dy >= 0
+                    ) {
+                        player.dy = 0; // 縦方向の速度をリセット
+                        player.y = platform.y - player.height; // プレイヤーを足場の上に固定
+                        player.onGround = true; // 地面にいる状態に設定
+                        onAnyPlatform = true; // 接触状態を記録
+                        console.log('Player landed on platform');
+                    }
+
+                    // プレイヤーが足場の左端に衝突した場合のみゲームオーバー
+                    if (
+                        player.x + player.width >= platform.x && // 少し余裕を持たせる
+                        player.x + player.width <= platform.x && // 左端付近
+                        player.y + player.height > platform.y && // プレイヤーが足場の高さにいる
+                        player.y < platform.y + platform.height && // プレイヤーが足場の下にはいない
+                        !player.onGround // 空中にいるときのみ判定
+                    ) {
+                        console.log('Game over: Player fell off the platform');
+                        endGame(false); // 足場から外れた場合はゲームオーバー
+                        return;
+                    }
+                });
+
+                // 足場に触れていない場合は空中状態に設定
+                if (!onAnyPlatform && player.y + player.height < canvas.height) {
+                    player.onGround = false;
+                }
+
+                lastFrequency = frequency; // 前回の周波数を更新
+                drawGame();
+                updateVolumeBar(frequency);
+                checkCoinCollision(); // コインの衝突判定
+            }
+        }
+
+        function drawGame() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'black';
+            platforms.forEach(platform => ctx.fillRect(platform.x, platform.y, platform.width, platform.height));
+            ctx.fillStyle = 'red';
+            ctx.fillRect(goal.x, goal.y, goal.width, goal.height);
+    
+            ctx.fillStyle = 'blue';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+    
+            coinData.forEach(coin => {
+                ctx.beginPath();
+                ctx.arc(coin.x, coin.y, coin.radius, 0, Math.PI * 2);
+                ctx.fillStyle = coin.color;
+                ctx.fill();
+                ctx.closePath();
+            });
+        }
+
+        function checkCoinCollision() {
+            coinData = coinData.filter(coin => {
+                const distX = player.x + player.width / 2 - coin.x;
+                const distY = player.y + player.height / 2 - coin.y;
+                const distance = Math.sqrt(distX * distX + distY * distY);
+
+                if (distance < coin.radius + player.width / 2) {
+                    coinScore += coin.points;
+                    if (coin.color === 'red') collectedCoins.red++;
+                    if (coin.color === 'blue') collectedCoins.blue++;
+                    if (coin.color === 'yellow') collectedCoins.yellow++;
+                    return false;
+                }
+                return true;
+            });
+        }
+
+        function updateVolumeBar(frequency) {
+            const bar = document.getElementById('volume-bar');
+            const percentage = Math.min(Math.max(frequency, 0), 300) / 300 * 100;
+            bar.style.width = `${percentage}%`;
+        }
+
+        function startGame() {
+            recording = true;
+            startMicrophone();
+            gameRunning = true;
+            startTime = performance.now();
+        }    
+
+        function endGame(isCleared) {
+            recording = false;
+            if (audioContext) audioContext.close();
+    
+            gameRunning = false;
+    
+            if (isCleared) {
+                const elapsedTime = ((performance.now() - startTime) / 1000).toFixed(2); // 経過時間を計算
+                const resultURL = `/voice_jump_hz/performance3_hz_rslt?elapsedTime=${elapsedTime}&coinScore=${coinScore}&redCoins=${collectedCoins.red}&blueCoins=${collectedCoins.blue}&yellowCoins=${collectedCoins.yellow}`;
+                window.location.href = resultURL;
+            } else {
+                window.location.reload();
+            }
+        }
+
+        document.getElementById('startButton').addEventListener('click', startGame);
+    </script>
+</body>
+</html>
+

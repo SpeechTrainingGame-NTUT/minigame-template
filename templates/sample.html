@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>サンプル音声</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    * {
+      font-family: 'Noto Sans JP', sans-serif !important;
+    }
+    .content {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+    .content input[type="number"],
+    .content input[type="text"],
+    .content select {
+      width: 100%;
+      max-width: 300px;
+      margin: 0 auto;
+      text-align: center;
+    }
+    .button-group {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+    }
+    .button-group button,
+    .button-group a {
+      width: 48%;
+      text-align: center;
+    }
+    .btn-primary {
+      background-color: #007bff;
+      color: white;
+    }
+    .btn-home {
+      background-color: #007bff;
+      color: white;
+      border: none;
+    }
+    .btn-home:hover,
+    .btn-home:active {
+      background-color: #0056b3;
+    }
+  </style>
+</head>
+
+  <script>
+    async function synthesizeSpeech() { // クリック時に音声合成を実行
+      const text = document.getElementById("txt").value.trim(); // 入力されたテキストを取得 (#txt の値)し、前後の空白を削除
+
+      // 選択された声のタイプ（男性・女性） と 読み上げ速度（デフォルト1.0） を取得
+      const voiceType = document.getElementById("voice").value;
+      const rate = parseFloat(document.getElementById("rate").value) || 1.0;
+
+      if (!text) {
+        alert("テキストを入力してください");
+        return;
+      }
+
+      const apiKey = "AIzaSyCZJewvuyz1b8amTCLqJrX6M66TpymXRLY";  // ここにAPIキーを設定
+      const url = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+
+      const requestBody = { // API に送るリクエストのデータを設定
+        input: { text: text }, // 入力された文章
+        voice: {
+          languageCode: "ja-JP",
+          name: voiceType,
+          ssmlGender: voiceType.includes("-B") ? "FEMALE" : "MALE" // -B（女性）なら "FEMALE"、-C（男性）なら "MALE"
+        },
+        audioConfig: {
+          audioEncoding: "mp3", // MP3 フォーマットの音声データを取得
+          speakingRate: rate
+        }
+      };
+
+      try {
+        const response = await fetch(url, { // Google API に POST リクエストを送信
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+        if (data.audioContent) {
+          const audio = new Audio(`data:audio/mp3;base64,${data.audioContent}`);
+          audio.play();
+        } else {
+          alert("音声合成に失敗しました");
+          console.error("APIエラー:", data);
+        }
+      } catch (error) {
+        console.error("APIリクエストエラー:", error);
+        alert("エラーが発生しました。");
+      }
+    }
+  </script>
+</head>
+<body class="container">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+      <h2 class="text-center mt-4">テキストを入力するとブラウザがしゃべります</h2>
+      <p class="text-center">
+        以下の項目で、必要に応じて変更することができます。<br>
+        音声合成を開始したい場合は、「開始」を押してください。<br>
+        ブラウザが単語を読み間違えることがあるので、その際は片仮名で聴きたい言葉を入力してください。<br>
+        薄い灰色で書かれているのは入力の例です。<br>
+        声のタイプは女性か男性のものを選択します。<br>
+      </p>
+      <div class="content">
+        <label for="rate">速さ(0.1 - 2.0, デフォルト：1.0)</label>
+        <input id="rate" type="number" class="form-control" step="0.1" min="0.1" max="2.0">
+      </div>
+
+      <div class="content">
+        <label for="voice">声のタイプ</label>
+        <select id="voice" class="form-select">
+          <option value="ja-JP-Standard-B">女性</option>
+          <option value="ja-JP-Standard-C">男性</option>
+        </select>
+      </div>
+
+      <div class="content">
+        <label for="txt">聴きたい言葉</label>
+        <input id="txt" type="text" class="form-control" placeholder="生麦生米生卵">
+      </div>
+    
+      <div class="button-group">
+        <button id="btn" class="btn btn-primary" onclick="synthesizeSpeech()">開始</button>
+        <a href="{{ url_for('index') }}" class="btn btn-home">ホーム画面へ</a>
+      </div>
+</body>
+</html>
+

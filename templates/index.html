@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>発話訓練 ミニゲーム</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        body, .btn {
+            font-family: 'Noto Sans JP', sans-serif !important;
+        }
+        .btn-custom {
+            background-color: black !important;
+            border-color: black !important;
+            color: #fff !important;
+            transition: opacity 0.3s ease !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 80px;
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+        .btn-custom:hover, .btn-custom:active {
+            background-color: #333333 !important;
+            border-color: #333333 !important;
+            color: #fff !important;
+            opacity: 0.9 !important;
+        }
+        .title-container {
+            margin-top: 1.25rem; /* 上部に余白を追加 */
+        }
+        .game-container {
+            margin-top: 2rem;
+        }
+        .btn-spacing {
+            margin-bottom: 1rem;
+        }
+        .btn-wrapper {
+            max-width: 300px; /* ボタンの横幅制限 */
+            width: 100%;
+        }
+        @media (max-width: 576px) {
+            .btn-custom {
+                height: 60px;
+                font-size: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="d-flex flex-column min-vh-100 bg-light">
+    <!-- タイトル部分に余白を追加 -->
+    <div class="title-container text-center">
+        <h2 class="mb-4">発話訓練 ミニゲーム</h2>
+    </div>
+    <main class="container game-container">
+        <div class="d-flex flex-column align-items-center">
+            <div class="btn-wrapper btn-spacing">
+                <a href="{{ url_for('utterance_check.index') }}" class="btn btn-custom w-100">
+                    発話チェック
+                </a>
+            </div>
+            <div class="btn-wrapper btn-spacing">
+                <a href="{{ url_for('sustainability_of_voice.index') }}" class="btn btn-custom w-100">
+                    声の持続力 チャレンジ
+                </a>
+            </div>
+            <div class="btn-wrapper btn-spacing">
+                <a href="{{ url_for('sample_audio.index') }}" class="btn btn-custom w-100">
+                    サンプル音声
+                </a>
+            </div>
+            <div class="btn-wrapper">
+                <a href="{{ url_for('voice_jump.index') }}" class="btn btn-custom w-100">
+                    ラン&ジャンプ
+                </a>
+            </div>
+        </div>
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

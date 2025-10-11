@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>発話チェックA 結果</title>
+  <!-- Bootstrap CSS -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans JP', sans-serif !important;
+    }
+    .container {
+      max-width: 800px; /* 幅を狭くするための設定 */
+    }
+    .result-card {
+      background-color: #f8f9fa;
+      border-radius: 10px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .arrow {
+      color: #6c757d;
+      margin: 0 10px;
+    }
+    .word-group {
+      margin-bottom: 15px;
+    }
+    .phoneme-stats {
+      background-color: #e9ecef;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    .result-section {
+      border-bottom: 1px solid #dee2e6;
+      padding-bottom: 15px;
+      margin-bottom: 15px;
+    }
+    .result-section:last-of-type {
+        border-bottom: none;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+    .btn-primary {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+        transition: background-color 0.3s;
+    }
+    .btn-primary:hover, .btn-primary:active {
+        background-color: #0056b3 !important; /* 濃い青 */
+        border-color: #0056b3 !important;
+        color: white !important;
+    }
+    .btn-try {
+        background-color: #28a745; /* 緑色の背景 */
+        color: white;
+        transition: background-color 0.3s;
+    }
+    .btn-try:hover, .btn-try:active {
+        background-color: #218838 !important; /* 濃い緑 */
+        color: white !important;
+    }
+    .button-group {
+      display: flex;
+      justify-content: center; /* 中央揃え */
+      gap: 10px; /* ボタン間のスペース */
+    }
+    .phoneme-summary {
+      cursor: pointer;
+      padding: 8px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+      transition: background-color 0.2s;
+    }
+
+    .phoneme-summary:hover {
+      background-color: #e9ecef;
+    }
+
+    .phoneme-details {
+      padding: 8px;
+      background-color: #ffffff;
+      border-left: 3px solid #6c757d;
+    }
+
+    details {
+      border-radius: 4px;
+      overflow: hidden;
+    }
+
+    details > summary {
+      list-style: none;
+    }
+
+    details > summary::-webkit-details-marker {
+      display: none;
+    }    
+    .phoneme-highlight-correct {
+      background-color: rgba(220, 53, 69, 0.2); /* 赤色の背景（薄く） */
+      padding: 2px 4px;
+      border-radius: 3px;
+      color: black;
+    }
+
+    .phoneme-highlight-incorrect {
+      background-color: rgba(0, 123, 255, 0.2); /* 青色の背景（薄く） */
+      padding: 2px 4px;
+      border-radius: 3px;
+      color: black;
+    }
+    .mb-2 {
+      margin-bottom: 0.5rem !important;
+    }
+  </style>
+</head>
+
+<body class="container py-5">
+  <h2 class="mb-4 text-center">発話チェックA 結果</h2>
+  
+  <div class="card shadow mb-4">
+    <div class="card-body">
+      <div class="result-section">
+        <p class="mb-2">正解数：<span class="fw-bold" id="correctCount"></span></p>
+        <p class="mb-2">ミス数：<span class="fw-bold" id="mistakeCount"></span></p>
+        <p class="mb-2 fw-bold">正答率：<span id="correctRate"></span>%</p>
+        <p class="text-primary mb-2">目標の正解数は<span class="fw-bold" id="targetCorrect"></span>で、結果の正解数は<span class="fw-bold" id="finalCorrectCount"></span>でした。</p>
+        <p class="fw-bold mb-2" id="achievementMessage"></p>
+      </div>
+
+      <div class="result-section">
+        <h5>正解した単語</h5>
+        <div class="word-group">
+          <p class="mb-2">ひらがな：<span id="correctWordsHiragana"></span></p>
+          <p class="mb-2">音素：<span id="correctWordsPhonemes"></span></p>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <h5>ミスした単語</h5>
+        <div class="word-group">
+          <p class="mb-2">ひらがな：<span id="mistakeWordsHiragana"></span></p>
+          <p class="mb-2">音素：<span id="mistakeWordsPhonemes"></span></p>
+        </div>
+      </div>
+
+      <div class="result-section">
+        <h5>間違いやすい音素</h5>
+        <div id="phonemeStats">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="button-group">
+    <a href="{{ url_for('utterance_check.check_a') }}" class="btn btn-try">再挑戦</a>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">ホーム画面へ</a>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+      //ここから
+      const urlParams = new URLSearchParams(window.location.search);
+      
+      // 基本情報の取得と表示
+      const correctCount = urlParams.get('correct');
+      const mistakeCount = urlParams.get('mistakes');
+      const targetCorrect = urlParams.get('targetCorrect');
+      
+      document.getElementById('correctCount').textContent = correctCount;
+      document.getElementById('mistakeCount').textContent = mistakeCount;
+      document.getElementById('targetCorrect').textContent = targetCorrect;
+      document.getElementById('finalCorrectCount').textContent = correctCount;
+
+
+      // 正答率の計算と表示
+      const correctRate = ((parseInt(correctCount) / (parseInt(correctCount) + parseInt(mistakeCount))) * 100).toFixed(2);
+      document.getElementById('correctRate').textContent = correctRate;
+
+      // 目標達成メッセージの設定
+      const achievementMessage = document.getElementById('achievementMessage');
+      if (parseInt(correctCount) >= parseInt(targetCorrect)) {
+        achievementMessage.textContent = '目標達成おめでとうございます！';
+        achievementMessage.classList.add('text-success');
+      } else {
+        achievementMessage.textContent = '次こそは目標達成ができるように頑張りましょう！';
+        achievementMessage.classList.add('text-warning');
+      }
+
+      // 正解した単語の処理
+      const correctWords = urlParams.get('correctWords').split('、');
+      let correctHiragana = [];
+      let correctPhonemes = [];
+      
+      // ミスした単語の処理
+      const mistakeWords = urlParams.get('mistakeWords').split('、');
+      let mistakeHiragana = [];
+      let mistakePhonemes = [];
+
+      // 各単語のひらがなと音素を取得
+      for (const word of correctWords) {
+        try {
+          const response = await fetch('/utterance_check/hiragana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: word.trim() })
+          });
+
+          if (!response.ok) {
+            console.error(`API request failed with status: ${response.status}, URL: ${response.url}`);
+            throw new Error(`HTTP error! Status: ${response.status}`);
+          }
+
+          const data = await response.json();
+          console.log(`API response for "${word}":`, data);
+
+          correctHiragana.push(data.converted);
+          correctPhonemes.push(`/${data.phonemes}/`);
+        } catch (error) {
+          console.error('Error during fetch:', error);
+        }
+      }
+
+      for (const word of mistakeWords) {
+        try {
+          // 誤りのある単語と正しい単語を分離
+          const [wrongWord, correctWordWithBracket] = word.split('(');
+          const correctWord = correctWordWithBracket.replace(')', ''); // 括弧を削除
+
+          // 誤りのある単語のひらがなと音素を取得
+          const wrongResponse = await fetch('/utterance_check/hiragana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: wrongWord.trim() }) // 余分な空白を削除
+          });
+          const wrongData = await wrongResponse.json();
+
+          // 正しい単語のひらがなと音素を取得
+          const correctResponse = await fetch('/utterance_check/hiragana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: correctWord.trim() }) // 余分な空白を削除
+          });
+          const correctData = await correctResponse.json();
+          
+          // ひらがなの形式を整形
+          mistakeHiragana.push(`${wrongData.converted}(${correctData.converted})`);
+
+          // 音素の形式を整形
+          mistakePhonemes.push(`/${wrongData.phonemes}/ (/${correctData.phonemes}/)`);
+        } catch (error) {
+          console.error('Error:', error);
+        }
+      }
+
+      // 結果の表示
+      document.getElementById('correctWordsHiragana').textContent = correctHiragana.join('、');
+      document.getElementById('correctWordsPhonemes').textContent = correctPhonemes.join(', ');
+      document.getElementById('mistakeWordsHiragana').textContent = mistakeWords[0] === "" ? "なし" : mistakeHiragana.join('、');
+      document.getElementById('mistakeWordsPhonemes').innerHTML = mistakeWords[0] === "" ? "なし" : mistakePhonemes.join(', ');
+
+      // 間違いやすい音素の統計を表示
+      function displayPhonemeStats() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const mistakeWords = urlParams.get('mistakeWords').split('、');
+        const statsContainer = document.getElementById('phonemeStats');
+        const phonemeErrors = new Map(); // 音素の誤りを記録
+        const phonemeExamples = new Map(); // 音素の誤りの例を保存
+
+        // ミスした単語がない場合（全問正解の場合）
+        if (mistakeWords[0] === "") {
+          statsContainer.innerHTML = '<p class="mb-0">全問正解のため、表示されません。</p>';
+          return;
+        }
+
+        // 各ミスした単語を処理
+        Promise.all(mistakeWords.map(async word => {
+          const [wrongWord, correctWordWithBracket] = word.split('(');
+          const correctWord = correctWordWithBracket.replace(')', '');
+
+          // 誤りのある単語のひらがなと音素を取得
+          const wrongResponse = await fetch('/utterance_check/hiragana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: wrongWord.trim() })
+          });
+          const wrongData = await wrongResponse.json();
+
+          // 正しい単語のひらがなと音素を取得
+          const correctResponse = await fetch('/utterance_check/hiragana', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: correctWord.trim() })
+          });
+          const correctData = await correctResponse.json();
+
+          // 音素の配列を作成
+          const wrongPhonemes = wrongData.phonemes.split(' ');
+          const correctPhonemes = correctData.phonemes.split(' ');
+
+          // 音素の長さが等しい場合のみ比較
+          if (wrongPhonemes.length === correctPhonemes.length) {
+            wrongPhonemes.forEach((wrongPhoneme, index) => {
+              if (wrongPhoneme !== correctPhonemes[index]) {
+                const key = `${correctPhonemes[index]} → ${wrongPhoneme}`;
+                phonemeErrors.set(key, (phonemeErrors.get(key) || 0) + 1);
+
+                // 例を保存（ひらがなに変換したものを保存）
+                const newExample = {
+                  hiragana: `${wrongData.converted}(${correctData.converted})`,
+                  phonemes: `/${wrongData.phonemes}/ (/${correctData.phonemes}/)`
+                };
+
+                if (!phonemeExamples.has(key)) {
+                  phonemeExamples.set(key, [newExample]);
+                } else {
+                  const examples = phonemeExamples.get(key);
+                  // 重複チェック
+                  const isDuplicate = examples.some(ex => 
+                    ex.hiragana === newExample.hiragana && 
+                    ex.phonemes === newExample.phonemes
+                  );
+                  if (!isDuplicate) {
+                    phonemeExamples.set(key, [...examples, newExample]);
+                  }
+                } 
+              }
+            });
+          }
+        })).then(() => {
+          // 結果の表示
+          if (phonemeErrors.size === 0) {
+            statsContainer.innerHTML = '<p class="mb-0">音素の長さが異なる誤りのみなので、表示されません。</p>';
+          } else {
+            // phonemeErrorsを回数の多い順にソート
+            const sortedPhonemeErrors = Array.from(phonemeErrors.entries())
+              .sort((a, b) => b[1] - a[1]);
+
+            const errorHtml = sortedPhonemeErrors
+              .map(([key, count]) => {
+                const [correct, wrong] = key.split(' → ');
+                const examples = phonemeExamples.get(key);
+                return `<details class="mb-2">
+                  <summary class="phoneme-summary">
+                    <span class="phoneme-highlight-correct">${correct}</span>
+                    <i class="fas fa-arrow-right arrow"></i>
+                    <span class="phoneme-highlight-incorrect">${wrong}</span>
+                    ${count}回
+                  </summary>
+                  <div class="phoneme-details mt-2 ms-3">
+                    <p class="mb-1">ひらがな：${examples.map(ex => ex.hiragana).join('、')}</p>
+                    <p class="mb-0">音素：${examples.map(ex => {
+                      const [wrongPhonemeStr, correctPhonemeStr] = ex.phonemes.split(' (');
+                      const wrongPhonemes = wrongPhonemeStr.replace(/\//g, '').trim().split(' ');
+                      const correctPhonemes = correctPhonemeStr.replace(/\//g, '').replace(')', '').trim().split(' ');
+
+                      // 各音素のペアを比較し、異なる音素を強調表示
+                      const highlightedPhonemes = wrongPhonemes.map((wp, i) => {
+                        if (wp === wrong && correctPhonemes[i] === correct) {
+                          return `<span class="phoneme-highlight-incorrect">${wp}</span>`;
+                        }
+                        return wp;
+                      }).join(' ');
+
+                      const highlightedCorrectPhonemes = correctPhonemes.map((cp, i) => {
+                        if (cp === correct && wrongPhonemes[i] === wrong) {
+                          return `<span class="phoneme-highlight-correct">${cp}</span>`;
+                        }
+                        return cp;
+                      }).join(' ');
+
+                      return `/${highlightedPhonemes}/ (/${highlightedCorrectPhonemes}/)`;
+                    }).join(', ')}</p>
+                  </div>
+                </details>`;
+              })
+              .join('');
+            statsContainer.innerHTML = errorHtml;
+          }
+        });
+      }
+
+      // 関数を呼び出す
+      displayPhonemeStats();
+    });
+
+    function formatPhonemeComparison(wrongPhonemes, correctPhonemes) {
+      // 音素の比較と色付けのロジックを実装
+      // 正しい音素は緑色、誤った音素は赤色で表示
+      return `<span class="phoneme-incorrect">/${wrongPhonemes}/</span>(${correctPhonemes})`;
+    }
+
+    
+  </script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js" defer></script>
+</body>
+</html>
