@@ -127,20 +127,20 @@
               </div>
               <!-- ===== ここまで枠内 ===== -->
 
-              <!-- 出題単語の種類（ラジオボタン）を同じ枠内に追加 -->
-                  <label class="form-label mt-2">出題単語の種類</label>
+              <!-- 出題表現の種類（ラジオボタン）を同じ枠内に追加 -->
+                  <label class="form-label mt-2">出題文の種類</label>
                   <div class="d-flex justify-content-between g-0">
                     <div class="d-flex align-items-center me-1">
                       <input type="radio" id="wordType1" name="wordType" value="registered" checked>
-                      <label for="wordType1" class="ms-1 mb-0">気になった単語のみ</label>
+                      <label for="wordType1" class="ms-1 mb-0">気になった表現のみ</label>
                     </div>
                     <div class="d-flex align-items-center me-1">
                       <input type="radio" id="wordType2" name="wordType" value="default">
-                      <label for="wordType2" class="ms-1 mb-0">生成単語のみ</label>
+                      <label for="wordType2" class="ms-1 mb-0">生成された文のみ</label>
                     </div>
                     <div class="d-flex align-items-center me-1">
                       <input type="radio" id="wordType3" name="wordType" value="both">
-                      <label for="wordType3" class="ms-1 mb-0">気になった単語と生成単語の両方</label>
+                      <label for="wordType3" class="ms-1 mb-0">気になった表現と生成された文の両方</label>
                     </div>
                   </div>
               <div id="warning" class="alert alert-danger mt-3" style="display: none;">目標の正解数と制限時間を設定してください。</div>
@@ -165,10 +165,11 @@
       </div>
     </section>
 
-    <!-- ここに追加 -->
+    <!--
     <div id="loading" class="alert alert-info text-center d-none">
       単語を生成中です。しばらくお待ちください...
     </div>
+    -->
 
     <!-- ホームに戻るボタンを追加 -->
     <div class="d-flex justify-content-between mt-4">
@@ -184,7 +185,6 @@
     </div>
   </div>
 
-  <!-- Bootstrap 5 JS (optional) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
   <script src="{{ url_for('static', filename='js/checkB.js') }}"></script>
 </body>

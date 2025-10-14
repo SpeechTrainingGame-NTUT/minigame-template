@@ -58,21 +58,42 @@ async function toHiraganaServerOrClient(text) {
 const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
 recognition.lang = 'ja-JP';
 recognition.continuous = false;
-recognition.interimResults = true;
+recognition.interimResults = false;
 
 // === 単語管理 ===
-async function getRandomWord() {
-  const res = await fetch('/utterance_check/generate_word', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usedWords: usedDefaultWords })
-  });
-  const data = await res.json();
-  if (data.word) {
-    usedDefaultWords.push(data.word);
-    return data.word;
+async function getRandomWord(retryCount = 0) {
+  try {
+    const res = await fetch('/utterance_check/generate_word', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usedWords: usedDefaultWords })
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP error: ${res.status}`);
+    }
+
+    const data = await res.json();
+    if (data.word) {
+      usedDefaultWords.push(data.word);
+      return data.word;
+    }
+
+    if (retryCount < 2) { // 最大3回再試行
+      console.warn("再試行中: 単語生成失敗");
+      return await getRandomWord(retryCount + 1);
+    }
+
+    console.error("単語生成に失敗（最終）:", data.error);
+    return "（単語生成失敗）";
+
+  } catch (e) {
+    console.error("getRandomWord エラー:", e);
+    if (retryCount < 2) {
+      return await getRandomWord(retryCount + 1);
+    }
+    return "（単語生成失敗）";
   }
-  return "（単語生成失敗）";
 }
 
 async function preGenerateWords() {
@@ -107,14 +128,69 @@ document.addEventListener("DOMContentLoaded", function () {
   const phonemeElement = document.getElementById("phoneme");
   const startButton = document.getElementById("start-button");
 
+  // ✅ 追加①：「目標の正解数」チェックボックスを単一選択にする
+  document.querySelectorAll('input[name="targetCorrect"]').forEach(box => {
+    box.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        document.querySelectorAll('input[name="targetCorrect"]').forEach(other => {
+          if (other !== e.target) other.checked = false;
+        });
+        targetInput.value = ''; // 手動入力欄をリセット
+      }
+    });
+  });
+
+  // ✅ 入力欄に数値を入力した場合、チェックボックスをすべて外す ←★これを追加
+  targetInput.addEventListener('input', () => {
+    if (targetInput.value.trim() !== '') {
+      document.querySelectorAll('input[name="targetCorrect"]').forEach(cb => cb.checked = false);
+    }
+  });
+
+  // ✅ 追加②：「制限時間」チェックボックスを単一選択にする
+  document.querySelectorAll('input[name="timer"]').forEach(box => {
+    box.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        document.querySelectorAll('input[name="timer"]').forEach(other => {
+          if (other !== e.target) other.checked = false;
+        });
+        timerInput.value = ''; // 手動入力欄をリセット
+      }
+    });
+  });
+
+  // ✅ 入力欄に数値を入力した場合、チェックボックスをすべて外す ←★これも追加
+  timerInput.addEventListener('input', () => {
+    if (timerInput.value.trim() !== '') {
+      document.querySelectorAll('input[name="timer"]').forEach(cb => cb.checked = false);
+    }
+  });
+
   if (startButton) {
     startButton.addEventListener('click', async function () {
-      const targetValue = parseInt(targetInput.value) || 5;
-      const timeValue = parseInt(timerInput.value) || 30;
+      localStorage.removeItem('phonemeIntensityData');
+
+      const targetValue = parseInt(targetInput.value) ||
+        [...document.querySelectorAll('input[name="targetCorrect"]:checked')]
+          .map(el => parseInt(el.value))[0] || 5;
+
+      const timeValue = parseInt(timerInput.value) ||
+        [...document.querySelectorAll('input[name="timer"]:checked')]
+          .map(el => parseInt(el.value))[0] || 30;
 
       if (targetValue > 0 && timeValue > 0) {
+
+        // ✅ ここでリセットする
+        correctAnswers = 0;
+        mistakes = 0;
+        correctWordsArray = [];
+        mistakeWordsArray = [];
+        usedDefaultWords = [];
+        gameIsOver = false;
+
         targetCorrect = targetValue;
         timeLimit = timeValue;
+
         warningMessage.classList.add('hidden');
         initialScreen.classList.add('hidden');
         playingScreen.classList.remove('hidden');
@@ -166,8 +242,12 @@ document.addEventListener("DOMContentLoaded", function () {
 
     // Final認識結果
     textLog.textContent = `認識結果: ${transcript}`;
-    const recogRes = await toHiraganaServerOrClient(transcript);
-    const expectRes = await toHiraganaServerOrClient(currentWord);
+    
+    // 並列で同時にひらがな変換を実行
+    const [recogRes, expectRes] = await Promise.all([
+      toHiraganaServerOrClient(transcript),
+      toHiraganaServerOrClient(currentWord)
+    ]);
 
     resultElement.textContent = `ひらがな変換結果: ${recogRes.converted}`;
     phonemeElement.textContent = `音素: /${recogRes.phonemes || ''}/`;
@@ -179,13 +259,29 @@ document.addEventListener("DOMContentLoaded", function () {
     } else {
       resultElement.textContent += " ❌不正解";
       mistakes++;
-      mistakeWordsArray.push(`${transcript} (${currentWord})`);
+      mistakeWordsArray.push(`${transcript} (${currentWord})`           );
     }
 
-    // 2秒待って次の単語へ
-    setTimeout(() => {
-      nextWordAndRecognition();
-    }, 2000);
+    // === 音素強度データを localStorage に保存 ===
+    try {
+      const allData = JSON.parse(localStorage.getItem('phonemeIntensityData') || '[]');
+      const record = {
+        word: currentWord,                   // 出題された単語
+        recognized: transcript,              // 認識された単語
+        correctAnswer: (recogRes.converted === expectRes.converted),
+        phonemesExpected: expectRes.phonemes || '',
+        phonemesRecognized: recogRes.phonemes || '',
+        confidence: event.results[last][0].confidence || 0, // SpeechRecognitionの信頼度
+        phonemeIntensities: [],              // 今は空。将来的に強度値を入れるならここに追加
+        intensity: 0.5                       // 仮の平均値
+      };
+      allData.push(record);
+      localStorage.setItem('phonemeIntensityData', JSON.stringify(allData));
+    } catch (err) {
+      console.error('phonemeIntensityData 保存エラー:', err);
+    }
+
+    recognition.stop();
   });
 
   recognition.addEventListener('start', () => {
@@ -194,12 +290,13 @@ document.addEventListener("DOMContentLoaded", function () {
     textLog.textContent = '🎙️ 音声認識を開始しました。話してください。';
   });
 
-  recognition.addEventListener('end', () => {
+  recognition.addEventListener('end', async () => {
     console.log('認識終了');
     isRecognitionActive = false;
     // 自動で再開
     if (!gameIsOver) {
-      setTimeout(() => startRecognition(), 500);
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      nextWordAndRecognition();  // end後に次の単語を出して再スタート
     }
   });
 
@@ -223,6 +320,7 @@ document.addEventListener("DOMContentLoaded", function () {
   function endGame() {
     gameIsOver = true;
     recognition.stop();
+
     const url = new URL('/utterance_check/checkA_end', window.location.origin);
     url.searchParams.append('correct', correctAnswers);
     url.searchParams.append('mistakes', mistakes);

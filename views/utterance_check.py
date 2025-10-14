@@ -12,9 +12,12 @@ from flask import current_app
 
 from janome.dic import UserDictionary
 from janome.tokenizer import Tokenizer
+from flask import make_response
 
 # Blueprintの作成
 utterance_check_bp = Blueprint('utterance_check', __name__, template_folder='../templates')
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # CORS設定
 @utterance_check_bp.after_request
@@ -155,65 +158,59 @@ def generate_word():
     used_words = request.json.get('usedWords', [])
     recent_words = request.json.get('recentWords', [])
 
-    # 文字数レンジを定義
-    length_ranges = [
-        (3, 4),
-        (5, 6),
-        (7, 8),
-        (9, 11),
-        (12, 15)
+    length_ranges = [(3, 4), (5, 6), (7, 8), (9, 11), (12, 15)]
+    range_counts = [
+        sum(1 for w in recent_words[-10:] if min_len <= len(w) <= max_len)
+        for (min_len, max_len) in length_ranges
     ]
-    # 直近の出題履歴から各レンジの出現回数をカウント
-    range_counts = []
-    for min_len, max_len in length_ranges:
-        count = sum(1 for w in recent_words[-10:] if min_len <= len(w) <= max_len)
-        range_counts.append(count)
 
-    # 出現回数が最も少ないレンジを優先、同数ならランダム
     min_count = min(range_counts)
     candidate_ranges = [r for r, c in zip(length_ranges, range_counts) if c == min_count]
     selected_range = random.choice(candidate_ranges)
     min_len, max_len = selected_range
 
     prompt = (
-        "次の条件を満たす日本語の単語を1つだけ生成してください。"
-        "5文字から15文字の範囲で（文字数のバランスは考慮すること）多くの人が馴染みやすい言葉を生成してください"
-        "・送り仮名や助詞、英語などは避けて"
-        f"・文字数は{min_len}文字以上、{max_len}文字以下"
-        f"・{min_len}〜{max_len}文字の単語を必ず出してください。"
-        "・ひらがなで出力してください"
-        "・カタカナや記号、句点や読点、余分な空白を含めない"
-        "・すでに以下の単語と重複しないこと："
-        + '、'.join(used_words)
-        + "\n単語だけをひらがなで出力してください。説明や引用符は不要です。"
+        "以下の条件を満たす日本語の単語を1つだけ生成してください：\n"
+        f"- 文字数は{min_len}〜{max_len}文字の範囲\n"
+        "- 送り仮名や助詞、英語、記号を含まない\n"
+        "- ひらがなのみで書く\n"
+        "- 意味のある自然な単語にする\n"
+        "- 以下の単語とは重複しない："
+        + '、'.join(used_words) +
+        "\n単語だけを出力。説明や句点、引用符を付けない。"
     )
 
+    fallback_words = ["あさ", "ひかり", "やま", "そら", "はな", "みず", "ことば"]
+
     try:
-        for _ in range(5):  # 最大5回まで再生成
+        for _ in range(10):  # 最大10回まで再生成
             response = openai.chat.completions.create(
-                model="gpt-4.1",
+                model="gpt-4.1-mini",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=20,
                 temperature=0.8,
-                n=1,
             )
             word = response.choices[0].message.content.strip()
+            # 記号除去・正規化
             word = re.sub(r'[^\u3041-\u309F]', '', word)
-            if (
-                is_valid_japanese_word(word)
-                and word not in used_words
-                and min_len <= len(word) <= max_len
-            ):
-                # 画面表示用に必ずひらがなに変換
-                hira_word = to_hiragana(word)
-                print('生成された単語:', hira_word)
-                return jsonify({'word': hira_word})
-            else:
-                print('無効な単語:', word)
-        return jsonify({'error': '有効な単語が生成できませんでした'}), 400
+
+            if min_len <= len(word) <= max_len and word not in used_words:
+                if is_valid_japanese_word(word):
+                    hira_word = to_hiragana(word)
+                    print('✅ 生成された単語:', hira_word)
+                    return jsonify({'word': hira_word}), 200
+                else:
+                    print('⚠️ Janomeで無効判定:', word)
+
+        # fallback
+        fallback = random.choice(fallback_words)
+        print('⚠️ fallback単語:', fallback)
+        return jsonify({'word': fallback}), 200
+
     except Exception as e:
-        print('OpenAI API error:', e)
-        return jsonify({'error': str(e)}), 500
+        print('❌ OpenAI API error:', e)
+        fallback = random.choice(fallback_words)
+        return jsonify({'word': fallback, 'error': str(e)}), 200
 
 @utterance_check_bp.route('/')
 def index():
@@ -238,7 +235,22 @@ def check_a_end():
     correctWords = request.args.get('correctWords', '')
     mistakeWords = request.args.get('mistakeWords', '')
     targetCorrect = request.args.get('targetCorrect', 5)
-    return render_template('checkA_end.html', correct=correct, mistakes=mistakes, correctWords=correctWords, mistakeWords=mistakeWords, targetCorrect=targetCorrect)
+
+    # ✅ 正しく: 引数をキーワード形式で渡す
+    response = make_response(render_template(
+        'checkA_end.html',
+        correct=correct,
+        mistakes=mistakes,
+        correctWords=correctWords,
+        mistakeWords=mistakeWords,
+        targetCorrect=targetCorrect
+    ))
+
+    # ✅ キャッシュ防止ヘッダを追加
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+
+    return response
 
 @utterance_check_bp.route('/checkB_end', methods=['GET', 'POST'])
 def check_b_end():

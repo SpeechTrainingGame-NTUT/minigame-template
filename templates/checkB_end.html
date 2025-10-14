@@ -87,15 +87,19 @@
         <p class="fw-bold mb-2" id="achievementMessage"></p>
       </div>
 
-      <!-- 正解した単語 -->
+      <!-- 正解した表現 -->
       <div class="result-section">
         <div class="d-flex align-items-center justify-content-between">
-          <h5 class="mb-0">正解した単語</h5>
+          <h5 class="mb-0">正解した文</h5>
           <div class="section-controls">
             <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#correctCollapse">音素強度の表示/非表示</button>
             <button id="correctOpenAll" class="btn btn-sm btn-outline-secondary">すべて展開</button>
             <button id="correctCloseAll" class="btn btn-sm btn-outline-secondary">すべて折りたたみ</button>
           </div>
+        </div>
+
+        <div class="alert alert-secondary mt-2 py-2" style="font-size:13px;">
+          各文ごとの音素強度バーは「音素強度の表示/非表示」→各文の結果一覧【例えば、こんにちは（認識：こんにちは）】といった流れでボタンを押すと確認できます。これはミスした文にも適用されます。
         </div>
 
         <div class="word-group mt-2">
@@ -106,19 +110,22 @@
         <div id="correctCollapse" class="collapse mt-2">
           <div id="correctIntensityList" class="mt-1"></div>
           <div class="legend"><span>弱い</span><span>普通</span><span>強い</span></div>
-          <p class="subtle mt-1 mb-0">※ 各単語の枠は独立しています。バー内に別の単語の枠は入りません。</p>
         </div>
       </div>
 
-      <!-- ミスした単語 -->
+      <!-- ミスした表現 -->
       <div class="result-section">
         <div class="d-flex align-items-center justify-content-between">
-          <h5 class="mb-0">ミスした単語</h5>
+          <h5 class="mb-0">ミスした文</h5>
           <div class="section-controls">
             <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#mistakeCollapse">音素強度の表示/非表示</button>
             <button id="mistakeOpenAll" class="btn btn-sm btn-outline-secondary">すべて展開</button>
             <button id="mistakeCloseAll" class="btn btn-sm btn-outline-secondary">すべて折りたたみ</button>
           </div>
+        </div>
+
+        <div class="alert alert-secondary mt-2 py-2" style="font-size:13px;">
+          出題された文は括弧の外、認識された文は括弧の中に表示されます。「こんにちは(こんにち)」であれば、出題された文は『こんにちは』、認識された文は『こんにち』となります。これはミスした文のみ適用されます。
         </div>
 
         <div class="word-group mt-2">
@@ -134,8 +141,8 @@
 
       <!-- DPマッチングで集計：間違いやすい音素 -->
       <div class="result-section">
-        <h5>間違いやすい音素（DPマッチング）</h5>
-        <p class="subtle">音素列の長さが異なる場合も、動的計画法で整列し「置換／削除／挿入」の傾向を集計します。</p>
+        <h5>間違いやすい音素</h5>
+        <p class="subtle">音素列の長さが異なる場合も発話された音素の並びを照らし合わせ、<br>「置換（似ている音に言い換えた）」「削除（一部の音が抜けた）」「挿入（余分な音を足した）」といった傾向を分析しています。</p>
         <div id="phonemeStats"></div>
       </div>
     </div>
@@ -270,8 +277,8 @@
           </summary>
 
           <div class="mt-2">
-            <div class="subtle">期待される音素：/${expected}/</div>
-            <div class="subtle">認識された音素：/${recognized}/</div>
+            <div class="subtle">期待される音素：${expected}</div>
+            <div class="subtle">認識された音素：${recognized}</div>
           </div>
 
           <div class="mt-2">`;
@@ -441,7 +448,7 @@
         for (const it of items) {
           const pct = Math.round(100 * it.cnt / maxCount);
           html += `<div class="confuse-item">
-            <div class="confuse-pair">/${it.pair}/</div>
+            <div class="confuse-pair">${it.pair.replace(/([^\u2192]+)/g, '/$1/') }</div>
             <div class="confuse-countbar-wrap">
               <div class="confuse-countbar" style="width:${pct}%"></div>
             </div>

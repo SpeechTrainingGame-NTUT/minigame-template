@@ -166,6 +166,18 @@ document.addEventListener("DOMContentLoaded", function () {
     const startButton = document.getElementById('start-button');
     const loadingDiv = document.getElementById('loading');
 
+    // 「目標の正解数」チェックボックスを単一選択にする
+    document.querySelectorAll('input[name="targetCorrect"]').forEach(box => {
+        box.addEventListener('change', (e) => {
+        if (e.target.checked) {
+            document.querySelectorAll('input[name="targetCorrect"]').forEach(other => {
+            if (other !== e.target) other.checked = false;
+            });
+            targetInput.value = ''; // 手動入力欄をリセット
+        }
+        });
+    });
+
     loadRegisteredWords();
 
     if (startButton) {
